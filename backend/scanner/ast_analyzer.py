@@ -1,14 +1,11 @@
 import ast
 
-from scanner.rules import create_sql_injection_finding
+from backend.scanner.rules import create_sql_injection_finding
 
 
 def analyze_python_file(file_path: str) -> list[dict]:
     """
     Analyze a Python file using the Abstract Syntax Tree (AST).
-
-    Returns:
-        A list of potential security findings.
     """
 
     findings = []
