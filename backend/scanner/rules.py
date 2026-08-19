@@ -18,10 +18,6 @@ def create_sql_injection_finding(
     line_number: int,
     evidence: str,
 ) -> dict:
-    """
-    Create a standardized SQL injection security finding.
-    """
-
     return {
         "rule_id": SQL_INJECTION_RULE["id"],
         "type": "sql_injection",
@@ -55,10 +51,6 @@ def create_command_injection_finding(
     line_number: int,
     evidence: str,
 ) -> dict:
-    """
-    Create a standardized command injection security finding.
-    """
-
     return {
         "rule_id": COMMAND_INJECTION_RULE["id"],
         "type": "command_injection",
