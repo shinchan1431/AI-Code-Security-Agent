@@ -31,6 +31,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
     for node in ast.walk(tree):
 
         if isinstance(node, ast.Call):
+
             if isinstance(node.func, ast.Attribute):
                 function_name = node.func.attr
 
@@ -42,16 +43,20 @@ def analyze_python_file(file_path: str) -> list[dict]:
                     )
 
                     findings.append(finding)
-             if isinstance(node.func, ast.Name):
-                 function_name = node.func.id
 
-                   if function_name in {"system", "popen"}:
-                       finding = create_command_injection_finding(
-                       file_path=file_path,
-                       line_number=node.lineno,
-                       evidence=f"System command function {function_name}() detected.",
-                       )
+            if isinstance(node.func, ast.Name):
+                function_name = node.func.id
 
-                  findings.append(finding)
+                if function_name in {"system", "popen"}:
+                    finding = create_command_injection_finding(
+                        file_path=file_path,
+                        line_number=node.lineno,
+                        evidence=(
+                            f"System command function "
+                            f"{function_name}() detected."
+                        ),
+                    )
+
+                    findings.append(finding)
 
     return findings
