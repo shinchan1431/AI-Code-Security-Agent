@@ -1,4 +1,3 @@
-
 SQL_INJECTION_RULE = {
     "id": "PY-SQL-001",
     "name": "Potential SQL Injection",
@@ -34,7 +33,9 @@ def create_sql_injection_finding(
         "description": SQL_INJECTION_RULE["description"],
         "recommendation": SQL_INJECTION_RULE["recommendation"],
     }
- COMMAND_INJECTION_RULE = {
+
+
+COMMAND_INJECTION_RULE = {
     "id": "PY-CMD-001",
     "name": "Potential Command Injection",
     "severity": "CRITICAL",
