@@ -9,6 +9,9 @@ from backend.scanner.rules import (
 def analyze_python_file(file_path: str) -> list[dict]:
     """
     Analyze a Python file using the Abstract Syntax Tree (AST).
+
+    Returns:
+        A list of security findings.
     """
 
     findings = []
@@ -32,6 +35,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
 
         if isinstance(node, ast.Call):
 
+            # SQL Injection detection
             if isinstance(node.func, ast.Attribute):
                 function_name = node.func.attr
 
@@ -44,6 +48,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
 
                     findings.append(finding)
 
+            # Command Injection detection
             if isinstance(node.func, ast.Name):
                 function_name = node.func.id
 
