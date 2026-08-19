@@ -1,6 +1,9 @@
 import ast
 
-from backend.scanner.rules import create_sql_injection_finding
+from backend.scanner.rules import (
+    create_sql_injection_finding,
+    create_command_injection_finding,
+)
 
 
 def analyze_python_file(file_path: str) -> list[dict]:
