@@ -36,32 +36,30 @@ def analyze_python_file(file_path: str) -> list[dict]:
         if isinstance(node, ast.Call):
 
             # SQL Injection detection
-            if isinstance(node.func, ast.Attribute):
-                function_name = node.func.attr
+           if isinstance(node.func, ast.Attribute):
+    function_name = node.func.attr
 
-                if function_name == "execute":
-                    finding = create_sql_injection_finding(
-                        file_path=file_path,
-                        line_number=node.lineno,
-                        evidence="Database execute() call detected.",
-                    )
+    # SQL Injection detection
+    if function_name == "execute":
+        finding = create_sql_injection_finding(
+            file_path=file_path,
+            line_number=node.lineno,
+            evidence="Database execute() call detected.",
+        )
 
-                    findings.append(finding)
+        findings.append(finding)
 
-            # Command Injection detection
-            if isinstance(node.func, ast.Name):
-                function_name = node.func.id
+    # Command Injection detection
+    if function_name in {"system", "popen"}:
+        finding = create_command_injection_finding(
+            file_path=file_path,
+            line_number=node.lineno,
+            evidence=(
+                f"System command function "
+                f"{function_name}() detected."
+            ),
+        )
 
-                if function_name in {"system", "popen"}:
-                    finding = create_command_injection_finding(
-                        file_path=file_path,
-                        line_number=node.lineno,
-                        evidence=(
-                            f"System command function "
-                            f"{function_name}() detected."
-                        ),
-                    )
-
-                    findings.append(finding)
-
-    return findings
+        findings.append(finding)
+                        
+                   
