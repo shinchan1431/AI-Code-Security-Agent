@@ -1,5 +1,6 @@
-
 import ast
+
+from scanner.rules import create_sql_injection_finding
 
 
 def analyze_python_file(file_path: str) -> list[dict]:
@@ -34,17 +35,12 @@ def analyze_python_file(file_path: str) -> list[dict]:
                 function_name = node.func.attr
 
                 if function_name == "execute":
-                    findings.append(
-                        {
-                            "type": "potential_sql_injection",
-                            "file": file_path,
-                            "line": node.lineno,
-                            "message": (
-                                "A database execute() call was detected. "
-                                "The query should be checked for unsafe "
-                                "string construction or untrusted input."
-                            ),
-                        }
+                    finding = create_sql_injection_finding(
+                        file_path=file_path,
+                        line_number=node.lineno,
+                        evidence="Database execute() call detected.",
                     )
+
+                    findings.append(finding)
 
     return findings
