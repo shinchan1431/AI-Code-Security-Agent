@@ -9,7 +9,7 @@ def main():
     try:
         repository_path = clone_repository(repository_url)
 
-        print(f"\nRepository cloned successfully!")
+        print("\nRepository cloned successfully!")
         print(f"Location: {repository_path}")
 
         source_files = find_source_files(repository_path)
@@ -21,6 +21,7 @@ def main():
         for file_path in source_files:
             print(f"\nAnalyzing: {file_path}")
 
+            # Currently AST analyzer supports Python files.
             if file_path.endswith(".py"):
                 findings = analyze_python_file(file_path)
 
@@ -31,6 +32,7 @@ def main():
                     )
 
                     print(f"  Line: {finding.get('line', '-')}")
+
                     print(
                         f"  Evidence: "
                         f"{finding.get('evidence', finding.get('message', ''))}"
