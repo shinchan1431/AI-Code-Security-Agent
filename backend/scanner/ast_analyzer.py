@@ -17,7 +17,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
     findings = []
 
     try:
-        with open(file_path, "r", encoding="utf-8") as file:
+        with open(file_path, "r", encoding="utf-8-sig") as file:
             source_code = file.read()
 
         tree = ast.parse(source_code, filename=file_path)
