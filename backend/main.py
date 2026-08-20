@@ -1,5 +1,6 @@
 from scanner.repository import clone_repository
 from scanner.file_scanner import find_source_files
+from scanner.ast_analyzer import analyze_python_file
 
 
 def main():
@@ -14,8 +15,24 @@ def main():
 
         print(f"\nSource files found: {len(source_files)}")
 
+        total_findings = 0
+
         for file_path in source_files:
-            print(f"  - {file_path}")
+            print(f"\nAnalyzing: {file_path}")
+
+            # Currently AST analyzer supports Python files.
+            if file_path.endswith(".py"):
+                findings = analyze_python_file(file_path)
+
+                for finding in findings:
+                    print(f"  [{finding.get('severity', 'ERROR')}] "
+                          f"{finding.get('name', finding.get('type'))}")
+                    print(f"  Line: {finding.get('line', '-')}")
+                    print(f"  Evidence: {finding.get('evidence', finding.get('message', ''))}")
+
+                total_findings += len(findings)
+
+        print(f"\nTotal security findings: {total_findings}")
 
     except ValueError as error:
         print(f"\nError: {error}")
