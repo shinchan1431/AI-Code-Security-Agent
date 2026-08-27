@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from backend.reporting.json_reporter import write_json_report
+from backend.scanner.secret_analyzer import analyze_secrets
 from backend.scanner.ast_analyzer import analyze_python_file
 from backend.scanner.file_scanner import find_source_files
 from backend.scanner.scan_models import ScanResult, ScanSummary
@@ -56,6 +57,14 @@ def scan_repository(repository_path: str) -> ScanResult:
             file_findings = analyze_python_file(file_path)
 
             for finding in file_findings:
+                if finding.get("type") == "analysis_error":
+                    analysis_errors.append(finding)
+                else:
+                    findings.append(finding)
+
+            secret_findings = analyze_secrets(file_path)
+
+            for finding in secret_findings:
                 if finding.get("type") == "analysis_error":
                     analysis_errors.append(finding)
                 else:

@@ -68,3 +68,37 @@ def create_command_injection_finding(
         "description": COMMAND_INJECTION_RULE["description"],
         "recommendation": COMMAND_INJECTION_RULE["recommendation"],
     }
+HARDCODED_SECRET_RULE = {
+    "id": "PY-SEC-001",
+    "name": "Potential Hardcoded Secret",
+    "severity": "HIGH",
+    "description": (
+        "A potential secret appears to be hardcoded directly "
+        "in source code."
+    ),
+    "recommendation": (
+        "Move secrets to environment variables or a secure "
+        "secrets manager and rotate exposed credentials."
+    ),
+}
+
+
+def create_hardcoded_secret_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized hardcoded secret security finding.
+    """
+    return {
+        "rule_id": HARDCODED_SECRET_RULE["id"],
+        "type": "hardcoded_secret",
+        "name": HARDCODED_SECRET_RULE["name"],
+        "severity": HARDCODED_SECRET_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": HARDCODED_SECRET_RULE["description"],
+        "recommendation": HARDCODED_SECRET_RULE["recommendation"],
+    }
