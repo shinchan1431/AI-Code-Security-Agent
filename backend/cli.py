@@ -17,7 +17,7 @@ def main():
 
     scan_parser = subparsers.add_parser(
         "scan",
-        help="Scan a local repository",
+        help="Scan a local repository or GitHub repository",
     )
 
     scan_parser.add_argument(

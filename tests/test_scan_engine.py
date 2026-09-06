@@ -40,3 +40,14 @@ def test_scan_safe_repository():
 
     assert result.status == "completed"
     assert result.summary.files_scanned > 0
+def test_finding_paths_are_repository_relative():
+    repository_path = TESTS_DIR / "vulnerable"
+    result = scan_repository(str(repository_path))
+
+    assert result.status == "completed"
+    assert result.findings
+
+    for finding in result.findings:
+        file_path = finding["file"]
+
+        assert not Path(file_path).is_absolute()
