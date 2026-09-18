@@ -10,6 +10,7 @@ from backend.scanner.repository import (
 )
 from backend.scanner.secret_analyzer import analyze_secrets
 from backend.scanner.ast_analyzer import analyze_python_file
+from backend.scanner.javascript_analyzer import analyze_javascript_file
 from backend.scanner.file_scanner import find_source_files
 from backend.scanner.scan_models import ScanResult, ScanSummary
 
@@ -98,7 +99,26 @@ def scan_repository(repository_path: str) -> ScanResult:
                         analysis_errors.append(finding)
                     else:
                         findings.append(finding)
+            elif extension in {".js", ".jsx", ".ts", ".tsx"}:
+                file_findings = analyze_javascript_file(file_path)
 
+                for finding in file_findings:
+                    finding = normalize_finding_path(finding, repository)
+
+                    if finding.get("type") == "analysis_error":
+                        analysis_errors.append(finding)
+                    else:
+                        findings.append(finding)
+
+                secret_findings = analyze_secrets(file_path)
+
+                for finding in secret_findings:
+                    finding = normalize_finding_path(finding, repository)
+
+                    if finding.get("type") == "analysis_error":
+                        analysis_errors.append(finding)
+                    else:
+                        findings.append(finding)
         severity_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
         for finding in findings:
             severity = finding.get("severity")
