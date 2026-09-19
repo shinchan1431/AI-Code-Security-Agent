@@ -3,6 +3,7 @@ import re
 from backend.scanner.rules import (
     create_command_injection_finding,
     create_sql_injection_finding,
+    create_xss_finding,
 )
 
 
@@ -82,6 +83,35 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                         "JavaScript database execute() call "
                         "uses SQL string concatenation."
                     ),
+                )
+
+                findings.append(finding)
+        # Detect dangerous JavaScript HTML/document sinks.
+        xss_patterns = [
+            (
+                r"\.innerHTML\s*=",
+                "JavaScript innerHTML assignment detected.",
+            ),
+            (
+                r"\.outerHTML\s*=",
+                "JavaScript outerHTML assignment detected.",
+            ),
+            (
+                r"\.insertAdjacentHTML\s*\(",
+                "JavaScript insertAdjacentHTML() call detected.",
+            ),
+            (
+                r"\bdocument\.write\s*\(",
+                "JavaScript document.write() call detected.",
+            ),
+        ]
+
+        for pattern, evidence in xss_patterns:
+            if re.search(pattern, line):
+                finding = create_xss_finding(
+                    file_path=file_path,
+                    line_number=line_number,
+                    evidence=evidence,
                 )
 
                 findings.append(finding)

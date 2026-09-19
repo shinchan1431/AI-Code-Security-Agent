@@ -102,3 +102,38 @@ def create_hardcoded_secret_finding(
         "description": HARDCODED_SECRET_RULE["description"],
         "recommendation": HARDCODED_SECRET_RULE["recommendation"],
     }
+XSS_RULE = {
+    "id": "JS-XSS-001",
+    "name": "Potential Cross-Site Scripting (XSS)",
+    "severity": "HIGH",
+    "description": (
+        "Untrusted input may be written directly into an HTML "
+        "or document sink, potentially allowing script injection."
+    ),
+    "recommendation": (
+        "Avoid inserting untrusted input into HTML sinks. "
+        "Prefer safe DOM APIs such as textContent and validate "
+        "or sanitize untrusted data before rendering."
+    ),
+}
+
+
+def create_xss_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized XSS security finding.
+    """
+    return {
+        "rule_id": XSS_RULE["id"],
+        "type": "xss",
+        "name": XSS_RULE["name"],
+        "severity": XSS_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": XSS_RULE["description"],
+        "recommendation": XSS_RULE["recommendation"],
+    }
