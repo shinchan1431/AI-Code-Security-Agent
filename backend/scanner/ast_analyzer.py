@@ -3,6 +3,7 @@
 from backend.scanner.rules import (
     create_sql_injection_finding,
     create_command_injection_finding,
+    create_insecure_deserialization_finding,
 )
 
 
@@ -56,7 +57,22 @@ def analyze_python_file(file_path: str) -> list[dict]:
             if isinstance(node.func, ast.Attribute):
 
                 function_name = node.func.attr
+                # Detect unsafe pickle deserialization.
+                if (
+                    isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "pickle"
+                    and function_name in {"load", "loads"}
+                ):
+                    finding = create_insecure_deserialization_finding(
+                        file_path=file_path,
+                        line_number=node.lineno,
+                        evidence=(
+                            f"pickle.{function_name}() "
+                            "deserialization detected."
+                        ),
+                    )
 
+                    findings.append(finding)
                 # Detect subprocess calls using shell=True.
                 if (
                     function_name

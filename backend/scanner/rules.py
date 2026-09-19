@@ -137,3 +137,39 @@ def create_xss_finding(
         "description": XSS_RULE["description"],
         "recommendation": XSS_RULE["recommendation"],
     }
+INSECURE_DESERIALIZATION_RULE = {
+    "id": "PY-SEC-002",
+    "name": "Potential Insecure Deserialization",
+    "severity": "HIGH",
+    "description": (
+        "Untrusted or potentially unsafe serialized data may be "
+        "deserialized in a way that can lead to code execution."
+    ),
+    "recommendation": (
+        "Avoid deserializing untrusted data with unsafe mechanisms "
+        "such as pickle. Use safer serialization formats such as JSON "
+        "when possible, or strictly validate and control the source "
+        "of serialized data."
+    ),
+}
+
+
+def create_insecure_deserialization_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized insecure deserialization security finding.
+    """
+    return {
+        "rule_id": INSECURE_DESERIALIZATION_RULE["id"],
+        "type": "insecure_deserialization",
+        "name": INSECURE_DESERIALIZATION_RULE["name"],
+        "severity": INSECURE_DESERIALIZATION_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": INSECURE_DESERIALIZATION_RULE["description"],
+        "recommendation": INSECURE_DESERIALIZATION_RULE["recommendation"],
+    }
