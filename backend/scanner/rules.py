@@ -173,3 +173,37 @@ def create_insecure_deserialization_finding(
         "description": INSECURE_DESERIALIZATION_RULE["description"],
         "recommendation": INSECURE_DESERIALIZATION_RULE["recommendation"],
     }
+WEAK_CRYPTO_RULE = {
+    "id": "PY-CRYPTO-001",
+    "name": "Potential Weak Cryptographic Hash",
+    "severity": "MEDIUM",
+    "description": (
+        "A weak cryptographic hash algorithm such as MD5 or SHA-1 "
+        "may be used for security-sensitive purposes."
+    ),
+    "recommendation": (
+        "Avoid MD5 and SHA-1 for security-sensitive hashing. "
+        "Use stronger algorithms such as SHA-256 or SHA-3 when appropriate."
+    ),
+}
+
+
+def create_weak_crypto_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized weak cryptography security finding.
+    """
+    return {
+        "rule_id": WEAK_CRYPTO_RULE["id"],
+        "type": "weak_cryptography",
+        "name": WEAK_CRYPTO_RULE["name"],
+        "severity": WEAK_CRYPTO_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": WEAK_CRYPTO_RULE["description"],
+        "recommendation": WEAK_CRYPTO_RULE["recommendation"],
+    }

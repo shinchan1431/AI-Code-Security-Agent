@@ -4,6 +4,7 @@ from backend.scanner.rules import (
     create_sql_injection_finding,
     create_command_injection_finding,
     create_insecure_deserialization_finding,
+    create_weak_crypto_finding,
 )
 
 
@@ -73,6 +74,22 @@ def analyze_python_file(file_path: str) -> list[dict]:
                     )
 
                     findings.append(finding)
+                # Detect weak cryptographic hash algorithms.
+                if (
+                    isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "hashlib"
+                    and function_name in {"md5", "sha1"}
+                ):
+                    finding = create_weak_crypto_finding(
+                        file_path=file_path,
+                        line_number=node.lineno,
+                        evidence=(
+                            f"hashlib.{function_name}() "
+                            "weak cryptographic hash detected."
+                        ),
+                    )
+
+                    findings.append(finding)    
                 # Detect subprocess calls using shell=True.
                 if (
                     function_name
