@@ -242,3 +242,38 @@ def create_path_traversal_finding(
         "description": PATH_TRAVERSAL_RULE["description"],
         "recommendation": PATH_TRAVERSAL_RULE["recommendation"],
     }
+SSRF_RULE = {
+    "id": "PY-SSRF-001",
+    "name": "Potential Server-Side Request Forgery",
+    "severity": "HIGH",
+    "description": (
+        "A network request may use a URL derived from user-controlled input, "
+        "which could allow requests to unintended internal or external services."
+    ),
+    "recommendation": (
+        "Validate and restrict user-controlled URLs. Use an allowlist of "
+        "permitted hosts and schemes, and block access to internal or "
+        "loopback addresses when appropriate."
+    ),
+}
+
+
+def create_ssrf_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized SSRF security finding.
+    """
+    return {
+        "rule_id": SSRF_RULE["id"],
+        "type": "ssrf",
+        "name": SSRF_RULE["name"],
+        "severity": SSRF_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": SSRF_RULE["description"],
+        "recommendation": SSRF_RULE["recommendation"],
+    }

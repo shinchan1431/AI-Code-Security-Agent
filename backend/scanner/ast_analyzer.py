@@ -6,6 +6,7 @@ from backend.scanner.rules import (
     create_insecure_deserialization_finding,
     create_weak_crypto_finding,
     create_path_traversal_finding,
+    create_ssrf_finding,
 )
 
 
@@ -47,6 +48,31 @@ def is_user_controlled_path(node: ast.AST) -> bool:
 
     return False
 
+def is_user_controlled_url(node: ast.AST) -> bool:
+    """
+    Check whether an AST expression appears to originate from
+    obvious user-controlled URL input.
+    """
+
+    # Direct input() calls.
+    if isinstance(node, ast.Call):
+        if isinstance(node.func, ast.Name) and node.func.id == "input":
+            return True
+
+        # request.args.get(...)
+        # request.form.get(...)
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr in {"args", "form"}
+            and isinstance(node.func.value.value, ast.Name)
+            and node.func.value.value.id == "request"
+        ):
+            return True
+
+    return False
+
 
 def analyze_python_file(file_path: str) -> list[dict]:
     """
@@ -58,6 +84,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
 
     findings = []
     user_controlled_variables = set()
+    user_controlled_urls = set()
 
     try:
         with open(file_path, "r", encoding="utf-8-sig") as file:
@@ -81,7 +108,10 @@ def analyze_python_file(file_path: str) -> list[dict]:
                 for target in node.targets:
                     if isinstance(target, ast.Name):
                         user_controlled_variables.add(target.id)
-
+            if is_user_controlled_url(node.value):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                       user_controlled_urls.add(target.id)
         if isinstance(node, ast.Call):
 
             # Attribute calls such as:
@@ -173,6 +203,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
             if isinstance(node.func, ast.Name):
 
                 function_name = node.func.id
+
                 # Detect file access using user-controlled paths.
                 if function_name == "open":
                     if node.args and isinstance(node.args[0], ast.Name):
@@ -182,6 +213,21 @@ def analyze_python_file(file_path: str) -> list[dict]:
                                 line_number=node.lineno,
                                 evidence=(
                                     "open() called with a path derived "
+                                    "from user-controlled input."
+                                ),
+                            )
+
+                            findings.append(finding)
+
+                # Detect network requests using user-controlled URLs.
+                if function_name == "urlopen":
+                    if node.args and isinstance(node.args[0], ast.Name):
+                        if node.args[0].id in user_controlled_urls:
+                            finding = create_ssrf_finding(
+                                file_path=file_path,
+                                line_number=node.lineno,
+                                evidence=(
+                                    "urlopen() called with a URL derived "
                                     "from user-controlled input."
                                 ),
                             )
