@@ -207,3 +207,38 @@ def create_weak_crypto_finding(
         "description": WEAK_CRYPTO_RULE["description"],
         "recommendation": WEAK_CRYPTO_RULE["recommendation"],
     }
+PATH_TRAVERSAL_RULE = {
+    "id": "PY-PATH-001",
+    "name": "Potential Path Traversal",
+    "severity": "HIGH",
+    "description": (
+        "A file path may be derived from user-controlled input, "
+        "which could allow access to unintended files."
+    ),
+    "recommendation": (
+        "Validate and constrain user-controlled file paths. "
+        "Use an allowlist of permitted files or directories and "
+        "resolve paths before accessing the filesystem."
+    ),
+}
+
+
+def create_path_traversal_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized path traversal security finding.
+    """
+    return {
+        "rule_id": PATH_TRAVERSAL_RULE["id"],
+        "type": "path_traversal",
+        "name": PATH_TRAVERSAL_RULE["name"],
+        "severity": PATH_TRAVERSAL_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": PATH_TRAVERSAL_RULE["description"],
+        "recommendation": PATH_TRAVERSAL_RULE["recommendation"],
+    }

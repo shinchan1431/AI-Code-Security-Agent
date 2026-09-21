@@ -1,10 +1,11 @@
-﻿import ast
+import ast
 
 from backend.scanner.rules import (
     create_sql_injection_finding,
     create_command_injection_finding,
     create_insecure_deserialization_finding,
     create_weak_crypto_finding,
+    create_path_traversal_finding,
 )
 
 
@@ -22,6 +23,30 @@ def is_shell_true_call(node: ast.Call) -> bool:
 
     return False
 
+def is_user_controlled_path(node: ast.AST) -> bool:
+    """
+    Check whether an AST expression appears to originate from
+    obvious user-controlled input.
+    """
+
+    # Direct input() calls.
+    if isinstance(node, ast.Call):
+        if isinstance(node.func, ast.Name) and node.func.id == "input":
+            return True
+
+        # request.args.get(...)
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "get"
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr in {"args", "form"}
+            and isinstance(node.func.value.value, ast.Name)
+            and node.func.value.value.id == "request"
+        ):
+            return True
+
+    return False
+
 
 def analyze_python_file(file_path: str) -> list[dict]:
     """
@@ -32,6 +57,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
     """
 
     findings = []
+    user_controlled_variables = set()
 
     try:
         with open(file_path, "r", encoding="utf-8-sig") as file:
@@ -49,6 +75,12 @@ def analyze_python_file(file_path: str) -> list[dict]:
         ]
 
     for node in ast.walk(tree):
+        # Track variables assigned from obvious user-controlled input.
+        if isinstance(node, ast.Assign):
+            if is_user_controlled_path(node.value):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        user_controlled_variables.add(target.id)
 
         if isinstance(node, ast.Call):
 
@@ -89,7 +121,7 @@ def analyze_python_file(file_path: str) -> list[dict]:
                         ),
                     )
 
-                    findings.append(finding)    
+                    findings.append(finding)
                 # Detect subprocess calls using shell=True.
                 if (
                     function_name
@@ -141,6 +173,20 @@ def analyze_python_file(file_path: str) -> list[dict]:
             if isinstance(node.func, ast.Name):
 
                 function_name = node.func.id
+                # Detect file access using user-controlled paths.
+                if function_name == "open":
+                    if node.args and isinstance(node.args[0], ast.Name):
+                        if node.args[0].id in user_controlled_variables:
+                            finding = create_path_traversal_finding(
+                                file_path=file_path,
+                                line_number=node.lineno,
+                                evidence=(
+                                    "open() called with a path derived "
+                                    "from user-controlled input."
+                                ),
+                            )
+
+                            findings.append(finding)
 
                 if function_name in {"system", "popen"}:
                     finding = create_command_injection_finding(
