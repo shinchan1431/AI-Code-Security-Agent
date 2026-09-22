@@ -16,6 +16,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     """
 
     findings = []
+    user_controlled_variables = set()
 
     try:
         with open(file_path, "r", encoding="utf-8-sig") as file:
@@ -33,6 +34,17 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     lines = source_code.splitlines()
 
     for line_number, line in enumerate(lines, start=1):
+
+        # Track variables assigned from obvious user-controlled input.
+        user_input_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+            r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
+            r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
+            line,
+        )
+
+        if user_input_match:
+            user_controlled_variables.add(user_input_match.group(1))
 
         # Detect JavaScript eval()
         if re.search(r"\beval\s*\(", line):
@@ -86,28 +98,33 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 )
 
                 findings.append(finding)
-        # Detect dangerous JavaScript HTML/document sinks.
+
+        # Detect dangerous JavaScript HTML/document sinks
+        # when their input is user-controlled.
         xss_patterns = [
             (
-                r"\.innerHTML\s*=",
+                r"\.innerHTML\s*=\s*([A-Za-z_$][\w$]*)\s*;?",
                 "JavaScript innerHTML assignment detected.",
             ),
             (
-                r"\.outerHTML\s*=",
+                r"\.outerHTML\s*=\s*([A-Za-z_$][\w$]*)\s*;?",
                 "JavaScript outerHTML assignment detected.",
             ),
             (
-                r"\.insertAdjacentHTML\s*\(",
+                r"\.insertAdjacentHTML\s*\(\s*[^,]+,\s*"
+                r"([A-Za-z_$][\w$]*)\s*\)",
                 "JavaScript insertAdjacentHTML() call detected.",
             ),
             (
-                r"\bdocument\.write\s*\(",
+                r"\bdocument\.write\s*\(\s*([A-Za-z_$][\w$]*)\s*\)",
                 "JavaScript document.write() call detected.",
             ),
         ]
 
         for pattern, evidence in xss_patterns:
-            if re.search(pattern, line):
+            match = re.search(pattern, line)
+
+            if match and match.group(1) in user_controlled_variables:
                 finding = create_xss_finding(
                     file_path=file_path,
                     line_number=line_number,

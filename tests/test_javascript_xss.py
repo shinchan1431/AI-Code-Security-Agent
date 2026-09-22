@@ -29,4 +29,15 @@ def test_javascript_xss_detection():
     assert findings[3]["type"] == "xss"
     assert findings[3]["line"] == 9
     assert "document.write" in findings[3]["evidence"]
-    
+
+
+def test_safe_javascript_html_sinks_are_ignored():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "xss_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
