@@ -41,3 +41,24 @@ def test_safe_javascript_html_sinks_are_ignored():
     findings = analyze_javascript_file(str(fixture))
 
     assert findings == []
+from pathlib import Path
+
+from backend.scanner.javascript_analyzer import analyze_javascript_file
+
+
+def test_javascript_xss_derived_variable_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "xss_derived.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+
+    assert findings[0]["rule_id"] == "JS-XSS-001"
+    assert findings[0]["type"] == "xss"
+    assert findings[0]["severity"] == "HIGH"
+    assert findings[0]["line"] == 4
+    assert "innerHTML" in findings[0]["evidence"]

@@ -46,6 +46,24 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         if user_input_match:
             user_controlled_variables.add(user_input_match.group(1))
 
+        # Propagate taint through derived variables.
+        derived_variable_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(.+)",
+            line,
+        )
+
+        if derived_variable_match:
+            variable_name = derived_variable_match.group(1)
+            assigned_expression = derived_variable_match.group(2)
+
+            for tainted_variable in user_controlled_variables:
+                if re.search(
+                    rf"\b{re.escape(tainted_variable)}\b",
+                    assigned_expression,
+                ):
+                    user_controlled_variables.add(variable_name)
+                    break
+
         # Detect JavaScript eval()
         if re.search(r"\beval\s*\(", line):
             finding = create_command_injection_finding(
