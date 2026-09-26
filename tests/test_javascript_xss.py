@@ -121,3 +121,20 @@ def test_javascript_xss_function_parameter_detection():
     assert findings[0]["severity"] == "HIGH"
     assert findings[0]["line"] == 6
     assert "innerHTML" in findings[0]["evidence"]
+
+def test_javascript_xss_function_parameter_derived_variable_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "xss_parameter_derived.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+
+    assert findings[0]["rule_id"] == "JS-XSS-001"
+    assert findings[0]["type"] == "xss"
+    assert findings[0]["severity"] == "HIGH"
+    assert findings[0]["line"] == 7
+    assert "innerHTML" in findings[0]["evidence"]

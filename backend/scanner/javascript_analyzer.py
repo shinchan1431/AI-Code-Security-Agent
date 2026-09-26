@@ -127,7 +127,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         if user_input_match:
             user_controlled_variables.add(user_input_match.group(1))
 
-                # Track reassignment and update taint state.
+        # Track reassignment and update taint state.
         reassignment_match = re.search(
             r"^\s*([A-Za-z_$][\w$]*)\s*=\s*(.+)",
             line,
@@ -169,7 +169,23 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             variable_name = derived_variable_match.group(1)
             assigned_expression = derived_variable_match.group(2)
 
-            for tainted_variable in user_controlled_variables:
+            effective_tainted_variables = set(user_controlled_variables)
+
+            # Include tainted function parameters inside their function body.
+            for function_name, function_info in function_definitions.items():
+                if (
+                    function_info["start"]
+                    < line_number - 1
+                    <= function_info["end"]
+                ):
+                    effective_tainted_variables.update(
+                        tainted_function_parameters.get(
+                            function_name,
+                            set(),
+                        )
+                    )
+
+            for tainted_variable in effective_tainted_variables:
                 if re.search(
                     rf"\b{re.escape(tainted_variable)}\b",
                     assigned_expression,
@@ -252,25 +268,8 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             ),
         ]
 
-                # Include function parameters that are tainted only inside
+        # Include function parameters that are tainted only inside
         # their corresponding function body.
-        effective_tainted_variables = set(user_controlled_variables)
-
-        for function_name, function_info in function_definitions.items():
-            if (
-                function_info["start"]
-                < line_number - 1
-                <= function_info["end"]
-            ):
-                effective_tainted_variables.update(
-                    tainted_function_parameters.get(
-                        function_name,
-                        set(),
-                    )
-                )
-
-                # Include tainted function parameters only inside their
-        # corresponding function body.
         effective_tainted_variables = set(user_controlled_variables)
 
         for function_name, function_info in function_definitions.items():
