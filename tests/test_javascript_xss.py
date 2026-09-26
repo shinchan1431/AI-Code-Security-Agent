@@ -138,3 +138,13 @@ def test_javascript_xss_function_parameter_derived_variable_detection():
     assert findings[0]["severity"] == "HIGH"
     assert findings[0]["line"] == 7
     assert "innerHTML" in findings[0]["evidence"]
+def test_javascript_xss_function_return_safe_value():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "xss_function_return_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 0

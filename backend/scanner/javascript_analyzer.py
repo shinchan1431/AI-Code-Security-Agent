@@ -62,11 +62,23 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 lines[end_line].count("{")
                 - lines[end_line].count("}")
             )
+        returns_parameter = None
+
+        for function_line in lines[index : end_line + 1]:
+            return_match = re.search(
+                r"\breturn\s+([A-Za-z_$][\w$]*)\s*;?",
+                function_line,
+            )
+
+            if return_match and return_match.group(1) in parameters:
+                returns_parameter = return_match.group(1)
+                break
 
         function_definitions[function_name] = {
             "parameters": parameters,
             "start": index,
             "end": end_line,
+            "returns_parameter": returns_parameter,
         }
 
     # Identify which function parameters receive user-controlled arguments.
@@ -184,15 +196,53 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                             set(),
                         )
                     )
+            # Handle a direct function call separately so that a tainted
+            # argument does not automatically taint the return value.
+            function_call_match = re.fullmatch(
+                r"\s*([A-Za-z_$][\w$]*)\s*\(([^)]*)\)\s*;?",
+                assigned_expression,
+            )
 
-            for tainted_variable in effective_tainted_variables:
-                if re.search(
-                    rf"\b{re.escape(tainted_variable)}\b",
-                    assigned_expression,
-                ):
-                    user_controlled_variables.add(variable_name)
-                    break
-      
+            if function_call_match:
+                called_function = function_call_match.group(1)
+                arguments = [
+                    argument.strip()
+                    for argument in function_call_match.group(2).split(",")
+                    if argument.strip()
+                ]
+
+                function_info = function_definitions.get(called_function)
+
+                if function_info:
+                    returned_parameter = function_info.get(
+                        "returns_parameter"
+                    )
+
+                    if returned_parameter:
+                        try:
+                            parameter_index = function_info[
+                                "parameters"
+                            ].index(returned_parameter)
+                        except ValueError:
+                            parameter_index = -1
+
+                        if (
+                            0 <= parameter_index < len(arguments)
+                            and arguments[parameter_index]
+                            in effective_tainted_variables
+                        ):
+                            user_controlled_variables.add(variable_name)
+
+            else:
+                # Non-function expressions can inherit taint from
+                # already-tainted variables.
+                for tainted_variable in effective_tainted_variables:
+                    if re.search(
+                        rf"\b{re.escape(tainted_variable)}\b",
+                        assigned_expression,
+                    ):
+                        user_controlled_variables.add(variable_name)
+                        break
         # Detect JavaScript eval()
         if re.search(r"\beval\s*\(", line):
             finding = create_command_injection_finding(
