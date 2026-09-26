@@ -35,7 +35,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
     for line_number, line in enumerate(lines, start=1):
 
-        # Track variables assigned from obvious user-controlled input.
+                # Track variables assigned from obvious user-controlled input.
         user_input_match = re.search(
             r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
             r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
@@ -45,6 +45,38 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
         if user_input_match:
             user_controlled_variables.add(user_input_match.group(1))
+
+                # Track reassignment and update taint state.
+        reassignment_match = re.search(
+            r"^\s*([A-Za-z_$][\w$]*)\s*=\s*(.+)",
+            line,
+        )
+
+        if reassignment_match:
+            variable_name = reassignment_match.group(1)
+            assigned_expression = reassignment_match.group(2)
+
+            # User-controlled source → tainted.
+            if re.search(
+                r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
+                r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
+                assigned_expression,
+            ):
+                user_controlled_variables.add(variable_name)
+
+            # Derived from an already-tainted variable → tainted.
+            elif any(
+                re.search(
+                    rf"\b{re.escape(tainted_variable)}\b",
+                    assigned_expression,
+                )
+                for tainted_variable in user_controlled_variables
+            ):
+                user_controlled_variables.add(variable_name)
+
+            # Otherwise the previous taint is cleared.
+            else:
+                user_controlled_variables.discard(variable_name)
 
         # Propagate taint through derived variables.
         derived_variable_match = re.search(
