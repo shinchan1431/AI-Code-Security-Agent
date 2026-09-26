@@ -104,3 +104,20 @@ def test_safe_xss_reassignment_is_ignored():
     findings = analyze_javascript_file(str(fixture))
 
     assert findings == []
+
+def test_javascript_xss_function_parameter_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "xss_function_parameter.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+
+    assert findings[0]["rule_id"] == "JS-XSS-001"
+    assert findings[0]["type"] == "xss"
+    assert findings[0]["severity"] == "HIGH"
+    assert findings[0]["line"] == 6
+    assert "innerHTML" in findings[0]["evidence"]

@@ -17,6 +17,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
     findings = []
     user_controlled_variables = set()
+    tainted_function_parameters = {}
 
     try:
         with open(file_path, "r", encoding="utf-8-sig") as file:
@@ -33,9 +34,89 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
     lines = source_code.splitlines()
 
+    # Track simple function definitions and their parameter ranges.
+    function_definitions = {}
+
+    for index, line in enumerate(lines):
+        function_match = re.search(
+            r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)",
+            line,
+        )
+
+        if not function_match:
+            continue
+
+        function_name = function_match.group(1)
+        parameters = [
+            parameter.strip()
+            for parameter in function_match.group(2).split(",")
+            if parameter.strip()
+        ]
+
+        brace_depth = line.count("{") - line.count("}")
+        end_line = index
+
+        while brace_depth > 0 and end_line + 1 < len(lines):
+            end_line += 1
+            brace_depth += (
+                lines[end_line].count("{")
+                - lines[end_line].count("}")
+            )
+
+        function_definitions[function_name] = {
+            "parameters": parameters,
+            "start": index,
+            "end": end_line,
+        }
+
+    # Identify which function parameters receive user-controlled arguments.
+    tainted_function_parameters = {}
+
+    for function_name, function_info in function_definitions.items():
+        parameters = function_info["parameters"]
+
+        for line in lines:
+            call_match = re.search(
+                rf"\b{re.escape(function_name)}\s*\(([^)]*)\)",
+                line,
+            )
+
+            if not call_match:
+                continue
+
+            arguments = [
+                argument.strip()
+                for argument in call_match.group(1).split(",")
+            ]
+
+            for index, argument in enumerate(arguments):
+                if (
+                    index < len(parameters)
+                    and re.fullmatch(
+                        r"[A-Za-z_$][\w$]*",
+                        argument,
+                    )
+                ):
+                    # Check whether the argument is an obvious user-controlled
+                    # variable based on its declaration anywhere in the file.
+                    for source_line in lines:
+                        if re.search(
+                            rf"\b(?:const|let|var)\s+"
+                            rf"{re.escape(argument)}\s*=\s*"
+                            r"(?:request\.(?:query|body|params)\."
+                            r"[A-Za-z_$][\w$]*|"
+                            r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
+                            source_line,
+                        ):
+                            tainted_function_parameters.setdefault(
+                                function_name,
+                                set(),
+                            ).add(parameters[index])
+                            break
+
     for line_number, line in enumerate(lines, start=1):
 
-                # Track variables assigned from obvious user-controlled input.
+        # Track variables assigned from obvious user-controlled input.
         user_input_match = re.search(
             r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
             r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
@@ -95,7 +176,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 ):
                     user_controlled_variables.add(variable_name)
                     break
-
+      
         # Detect JavaScript eval()
         if re.search(r"\beval\s*\(", line):
             finding = create_command_injection_finding(
@@ -171,10 +252,47 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             ),
         ]
 
+                # Include function parameters that are tainted only inside
+        # their corresponding function body.
+        effective_tainted_variables = set(user_controlled_variables)
+
+        for function_name, function_info in function_definitions.items():
+            if (
+                function_info["start"]
+                < line_number - 1
+                <= function_info["end"]
+            ):
+                effective_tainted_variables.update(
+                    tainted_function_parameters.get(
+                        function_name,
+                        set(),
+                    )
+                )
+
+                # Include tainted function parameters only inside their
+        # corresponding function body.
+        effective_tainted_variables = set(user_controlled_variables)
+
+        for function_name, function_info in function_definitions.items():
+            if (
+                function_info["start"]
+                < line_number - 1
+                <= function_info["end"]
+            ):
+                effective_tainted_variables.update(
+                    tainted_function_parameters.get(
+                        function_name,
+                        set(),
+                    )
+                )
+
         for pattern, evidence in xss_patterns:
             match = re.search(pattern, line)
 
-            if match and match.group(1) in user_controlled_variables:
+            if (
+                match
+                and match.group(1) in effective_tainted_variables
+            ):
                 finding = create_xss_finding(
                     file_path=file_path,
                     line_number=line_number,

@@ -37,9 +37,9 @@ def test_cli_scan_vulnerable_repository(tmp_path):
 
     assert result.returncode == 0
     assert "Status: completed" in result.stdout
-    assert "Files found: 11" in result.stdout
-    assert "Files scanned: 11" in result.stdout
-    assert "Findings: 17" in result.stdout
+    assert "Files found: 12" in result.stdout
+    assert "Files scanned: 12" in result.stdout
+    assert "Findings: 18" in result.stdout
 
     assert output_file.exists()
 
@@ -60,7 +60,7 @@ def test_cli_report_contains_findings(tmp_path):
         report = json.load(file)
 
     assert report["status"] == "completed"
-    assert report["summary"]["findings"] == 17
+    assert report["summary"]["findings"] == 18
 
 
 def test_cli_invalid_repository():
