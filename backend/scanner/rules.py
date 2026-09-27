@@ -277,3 +277,40 @@ def create_ssrf_finding(
         "description": SSRF_RULE["description"],
         "recommendation": SSRF_RULE["recommendation"],
     }
+
+PROTOTYPE_POLLUTION_RULE = {
+    "id": "JS-PROT-001",
+    "name": "Potential Prototype Pollution",
+    "severity": "HIGH",
+    "description": (
+        "Object properties may be written using a dangerous prototype "
+        "property or user-controlled key, which could modify object "
+        "prototypes and affect application behavior."
+    ),
+    "recommendation": (
+        "Avoid assigning untrusted keys to objects without validation. "
+        "Block dangerous properties such as __proto__, constructor, "
+        "and prototype, and use safer object handling where appropriate."
+    ),
+}
+
+
+def create_prototype_pollution_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized prototype pollution security finding.
+    """
+    return {
+        "rule_id": PROTOTYPE_POLLUTION_RULE["id"],
+        "type": "prototype_pollution",
+        "name": PROTOTYPE_POLLUTION_RULE["name"],
+        "severity": PROTOTYPE_POLLUTION_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": PROTOTYPE_POLLUTION_RULE["description"],
+        "recommendation": PROTOTYPE_POLLUTION_RULE["recommendation"],
+    }

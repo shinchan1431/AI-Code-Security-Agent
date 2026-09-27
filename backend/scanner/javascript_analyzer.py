@@ -4,6 +4,7 @@ from backend.scanner.rules import (
     create_command_injection_finding,
     create_sql_injection_finding,
     create_xss_finding,
+    create_prototype_pollution_finding,
 )
 
 
@@ -19,6 +20,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     user_controlled_variables = set()
     tainted_object_properties = set()
     tainted_function_parameters = {}
+    prototype_pollution_keys = set()
 
     try:
         with open(file_path, "r", encoding="utf-8-sig") as file:
@@ -126,9 +128,64 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                                 set(),
                             ).add(parameters[index])
                             break
-
     for line_number, line in enumerate(lines, start=1):
+        # Track user-controlled property keys.
+        property_key_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+            r"(?:request\.(?:query|body|params)|req\.(?:query|body|params))"
+            r"\.[A-Za-z_$][\w$]*",
+            line,
+        )
 
+        if property_key_match:
+            prototype_pollution_keys.add(property_key_match.group(1))
+
+        # Detect explicit dangerous prototype property writes.
+        dangerous_prototype_match = re.search(
+            r"\b[A-Za-z_$][\w$]*\s*\[\s*['\"]__proto__['\"]\s*\]\s*=",
+            line,
+        )
+
+        if dangerous_prototype_match:
+            findings.append(
+                create_prototype_pollution_finding(
+                    file_path,
+                    line_number,
+                    line.strip(),
+                )
+            )
+        # Detect constructor.prototype pollution.
+        constructor_prototype_match = re.search(
+            r"\b[A-Za-z_$][\w$]*\s*\[\s*['\"]constructor['\"]\s*\]"
+            r"\s*\[\s*['\"]prototype['\"]\s*\]\s*=",
+            line,
+        )
+        if constructor_prototype_match:
+            findings.append(
+                create_prototype_pollution_finding(
+                    file_path,
+                    line_number,
+                    line.strip(),
+                )
+            )
+        # Detect dynamic property writes using user-controlled keys.
+        dynamic_property_match = re.search(
+            r"\b([A-Za-z_$][\w$]*)\s*\[\s*([A-Za-z_$][\w$]*)\s*\]\s*=",
+            line,
+        )
+
+        if (
+            dynamic_property_match
+            and dynamic_property_match.group(2)
+            in prototype_pollution_keys
+        ):
+            findings.append(
+                create_prototype_pollution_finding(
+                    file_path,
+                    line_number,
+                    line.strip(),
+                )
+            )
         # Track variables assigned from obvious user-controlled input.
         user_input_match = re.search(
             r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
