@@ -5,6 +5,7 @@ from backend.scanner.rules import (
     create_sql_injection_finding,
     create_xss_finding,
     create_prototype_pollution_finding,
+    create_js_path_traversal_finding,
 )
 
 
@@ -21,6 +22,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     tainted_object_properties = set()
     tainted_function_parameters = {}
     prototype_pollution_keys = set()
+    path_traversal_variables = set()
 
     try:
         with open(file_path, "r", encoding="utf-8-sig") as file:
@@ -140,6 +142,39 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         if property_key_match:
             prototype_pollution_keys.add(property_key_match.group(1))
 
+        # Track user-controlled values used for filesystem paths.
+        path_input_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+            r"(?:request\.(?:query|body|params)|req\.(?:query|body|params))"
+            r"\.[A-Za-z_$][\w$]*",
+            line,
+        )
+
+        if path_input_match:
+            path_traversal_variables.add(path_input_match.group(1))
+
+        # Detect filesystem operations using user-controlled path values.
+        path_traversal_match = re.search(
+            r"\b(?:fs|fsp|fileSystem)\."
+            r"(?:readFile|readFileSync|writeFile|writeFileSync|"
+            r"appendFile|appendFileSync|open|openSync|unlink|unlinkSync|"
+            r"mkdir|mkdirSync|readdir|readdirSync)\s*"
+            r"\([^)]*\b([A-Za-z_$][\w$]*)\b[^)]*\)",
+            line,
+        )
+
+        if (
+            path_traversal_match
+            and path_traversal_match.group(1)
+            in path_traversal_variables
+        ):
+            findings.append(
+                create_js_path_traversal_finding(
+                    file_path,
+                    line_number,
+                    line.strip(),
+                )
+            )
         # Detect explicit dangerous prototype property writes.
         dangerous_prototype_match = re.search(
             r"\b[A-Za-z_$][\w$]*\s*\[\s*['\"]__proto__['\"]\s*\]\s*=",

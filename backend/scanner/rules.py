@@ -278,6 +278,7 @@ def create_ssrf_finding(
         "recommendation": SSRF_RULE["recommendation"],
     }
 
+#prototype_pollution_rule.
 PROTOTYPE_POLLUTION_RULE = {
     "id": "JS-PROT-001",
     "name": "Potential Prototype Pollution",
@@ -313,4 +314,41 @@ def create_prototype_pollution_finding(
         "evidence": evidence,
         "description": PROTOTYPE_POLLUTION_RULE["description"],
         "recommendation": PROTOTYPE_POLLUTION_RULE["recommendation"],
+    }
+
+# path_traversal_rule.
+JS_PATH_TRAVERSAL_RULE = {
+    "id": "JS-PATH-001",
+    "name": "Potential Path Traversal",
+    "severity": "HIGH",
+    "description": (
+        "User-controlled input may be used to construct a filesystem path, "
+        "which could allow access to files outside the intended directory."
+    ),
+    "recommendation": (
+        "Validate and constrain user-controlled file paths. Use allowlists, "
+        "safe path resolution, and verify that the resolved path remains "
+        "inside the intended directory."
+    ),
+}
+
+
+def create_js_path_traversal_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    """
+    Create a standardized path traversal security finding.
+    """
+    return {
+        "rule_id": JS_PATH_TRAVERSAL_RULE["id"],
+        "type": "path_traversal",
+        "name": JS_PATH_TRAVERSAL_RULE["name"],
+        "severity": JS_PATH_TRAVERSAL_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": JS_PATH_TRAVERSAL_RULE["description"],
+        "recommendation": JS_PATH_TRAVERSAL_RULE["recommendation"],
     }
