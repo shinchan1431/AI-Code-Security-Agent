@@ -17,6 +17,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
     findings = []
     user_controlled_variables = set()
+    tainted_object_properties = set()
     tainted_function_parameters = {}
 
     try:
@@ -295,25 +296,51 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 )
 
                 findings.append(finding)
+        # Track simple object properties that receive tainted values.
+        object_property_match = re.search(
+            r"^\s*([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*,?\s*$",
+            line,
+        )
 
+        if object_property_match:
+            property_name = object_property_match.group(1)
+            property_value = object_property_match.group(2)
+
+            if property_value in effective_tainted_variables:
+                # Find the nearest object declaration above this property.
+                for previous_index in range(line_number - 2, -1, -1):
+                    previous_line = lines[previous_index]
+
+                    object_match = re.search(
+                        r"\b(?:const|let|var)\s+"
+                        r"([A-Za-z_$][\w$]*)\s*=\s*\{",
+                        previous_line,
+                    )
+
+                    if object_match:
+                        object_name = object_match.group(1)
+                        tainted_object_properties.add(
+                            f"{object_name}.{property_name}"
+                        )
+                        break
         # Detect dangerous JavaScript HTML/document sinks
         # when their input is user-controlled.
         xss_patterns = [
             (
-                r"\.innerHTML\s*=\s*([A-Za-z_$][\w$]*)\s*;?",
+                r"\.innerHTML\s*=\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*;?",
                 "JavaScript innerHTML assignment detected.",
             ),
             (
-                r"\.outerHTML\s*=\s*([A-Za-z_$][\w$]*)\s*;?",
+                r"\.outerHTML\s*=\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*;?",
                 "JavaScript outerHTML assignment detected.",
             ),
             (
-                r"\.insertAdjacentHTML\s*\(\s*[^,]+,\s*"
-                r"([A-Za-z_$][\w$]*)\s*\)",
-                "JavaScript insertAdjacentHTML() call detected.",
+               r"\.insertAdjacentHTML\s*\(\s*[^,]+,\s*"
+               r"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*\)",
+               "JavaScript insertAdjacentHTML() call detected.",
             ),
             (
-                r"\bdocument\.write\s*\(\s*([A-Za-z_$][\w$]*)\s*\)",
+                r"\bdocument\.write\s*\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*\)",
                 "JavaScript document.write() call detected.",
             ),
         ]
@@ -340,7 +367,10 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
             if (
                 match
-                and match.group(1) in effective_tainted_variables
+                and (
+                    match.group(1) in effective_tainted_variables
+                    or match.group(1) in tainted_object_properties
+                )
             ):
                 finding = create_xss_finding(
                     file_path=file_path,

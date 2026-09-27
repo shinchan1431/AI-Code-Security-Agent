@@ -148,3 +148,28 @@ def test_javascript_xss_function_return_safe_value():
     findings = analyze_javascript_file(str(fixture))
 
     assert len(findings) == 0
+
+
+def test_javascript_xss_object_property():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "xss_object_property.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+    assert findings[0]["rule_id"] == "JS-XSS-001"
+    assert findings[0]["severity"] == "HIGH"
+    assert findings[0]["line"] == 7
+def test_javascript_xss_object_property_safe():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "xss_object_property_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
