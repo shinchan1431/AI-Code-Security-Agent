@@ -116,22 +116,31 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                         argument,
                     )
                 ):
-                    # Check whether the argument is an obvious user-controlled
-                    # variable based on its declaration anywhere in the file.
-                    for source_line in lines:
-                        if re.search(
-                            rf"\b(?:const|let|var)\s+"
-                            rf"{re.escape(argument)}\s*=\s*"
-                            r"(?:request\.(?:query|body|params)\."
-                            r"[A-Za-z_$][\w$]*|"
-                            r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
-                            source_line,
-                        ):
-                            tainted_function_parameters.setdefault(
-                                function_name,
-                                set(),
-                            ).add(parameters[index])
-                            break
+                    # Check whether the argument is already tainted.
+                    # This allows SSRF and other data-flow taint to cross
+                    # function boundaries.
+                    argument_is_tainted = argument in user_controlled_variables
+
+                    # Also check whether the argument is directly assigned
+                    # from an obvious user-controlled source.
+                    if not argument_is_tainted:
+                        for source_line in lines:
+                            if re.search(
+                                rf"\b(?:const|let|var)\s+"
+                                rf"{re.escape(argument)}\s*=\s*"
+                                r"(?:request\.(?:query|body|params)\."
+                                r"[A-Za-z_$][\w$]*|"
+                                r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
+                                source_line,
+                            ):
+                                argument_is_tainted = True
+                                break
+
+                    if argument_is_tainted:
+                        tainted_function_parameters.setdefault(
+                            function_name,
+                            set(),
+                        ).add(parameters[index])
     for line_number, line in enumerate(lines, start=1):
         # Track user-controlled property keys.
         property_key_match = re.search(
@@ -197,9 +206,26 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             line,
         )
 
+        # Include SSRF-tainted function parameters while analyzing
+        # their corresponding function body.
+        effective_ssrf_variables = set(ssrf_variables)
+
+        for function_name, function_info in function_definitions.items():
+            if (
+                function_info["start"]
+                < line_number - 1
+                <= function_info["end"]
+            ):
+                effective_ssrf_variables.update(
+                    tainted_function_parameters.get(
+                        function_name,
+                        set(),
+                    )
+                )
+
         if (
             ssrf_match
-            and ssrf_match.group(1) in ssrf_variables
+            and ssrf_match.group(1) in effective_ssrf_variables
         ):
             findings.append(
                 create_js_ssrf_finding(
