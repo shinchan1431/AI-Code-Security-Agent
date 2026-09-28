@@ -352,3 +352,35 @@ def create_js_path_traversal_finding(
         "description": JS_PATH_TRAVERSAL_RULE["description"],
         "recommendation": JS_PATH_TRAVERSAL_RULE["recommendation"],
     }
+JS_SSRF_RULE = {
+    "id": "JS-SSRF-001",
+    "name": "Potential Server-Side Request Forgery",
+    "severity": "HIGH",
+    "description": (
+        "User-controlled input may be used as the destination of a server-side "
+        "HTTP request, which could allow requests to unintended internal or external resources."
+    ),
+    "recommendation": (
+        "Do not use untrusted input directly as a request destination. "
+        "Validate URLs against an allowlist, restrict protocols and hosts, "
+        "and block access to internal or loopback addresses."
+    ),
+}
+
+
+def create_js_ssrf_finding(
+    file_path: str,
+    line_number: int,
+    evidence: str,
+) -> dict:
+    return {
+        "rule_id": JS_SSRF_RULE["id"],
+        "type": "ssrf",
+        "name": JS_SSRF_RULE["name"],
+        "severity": JS_SSRF_RULE["severity"],
+        "file": file_path,
+        "line": line_number,
+        "evidence": evidence,
+        "description": JS_SSRF_RULE["description"],
+        "recommendation": JS_SSRF_RULE["recommendation"],
+    }

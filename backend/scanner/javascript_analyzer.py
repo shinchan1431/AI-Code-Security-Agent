@@ -6,6 +6,7 @@ from backend.scanner.rules import (
     create_xss_finding,
     create_prototype_pollution_finding,
     create_js_path_traversal_finding,
+    create_js_ssrf_finding,
 )
 
 
@@ -23,6 +24,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     tainted_function_parameters = {}
     prototype_pollution_keys = set()
     path_traversal_variables = set()
+    ssrf_variables = set()
 
     try:
         with open(file_path, "r", encoding="utf-8-sig") as file:
@@ -170,6 +172,37 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         ):
             findings.append(
                 create_js_path_traversal_finding(
+                    file_path,
+                    line_number,
+                    line.strip(),
+                )
+            )
+        # Track user-controlled values used as request destinations.
+        ssrf_input_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+            r"(?:request\.(?:query|body|params)|req\.(?:query|body|params))"
+            r"\.[A-Za-z_$][\w$]*",
+            line,
+        )
+
+        if ssrf_input_match:
+            ssrf_variables.add(ssrf_input_match.group(1))
+
+
+        # Detect server-side HTTP requests using user-controlled destinations.
+        ssrf_match = re.search(
+            r"\b(?:fetch|axios\.(?:get|post|put|delete|request)|"
+            r"http\.(?:get|request)|https\.(?:get|request))\s*"
+            r"\([^)]*\b([A-Za-z_$][\w$]*)\b[^)]*\)",
+            line,
+        )
+
+        if (
+            ssrf_match
+            and ssrf_match.group(1) in ssrf_variables
+        ):
+            findings.append(
+                create_js_ssrf_finding(
                     file_path,
                     line_number,
                     line.strip(),
