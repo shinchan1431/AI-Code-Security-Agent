@@ -308,7 +308,15 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             assigned_expression = derived_variable_match.group(2)
 
             effective_tainted_variables = set(user_controlled_variables)
-
+            # Propagate SSRF taint through derived variables.
+            if any(
+                re.search(
+                    rf"\b{re.escape(ssrf_variable)}\b",
+                    assigned_expression,
+                )
+                for ssrf_variable in ssrf_variables
+            ):
+                ssrf_variables.add(variable_name)
             # Include tainted function parameters inside their function body.
             for function_name, function_info in function_definitions.items():
                 if (

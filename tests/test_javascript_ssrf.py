@@ -30,3 +30,18 @@ def test_javascript_ssrf_safe():
     findings = analyze_javascript_file(str(fixture))
 
     assert findings == []
+def test_javascript_ssrf_two_hop_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_ssrf_two_hop.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+
+    assert findings[0]["rule_id"] == "JS-SSRF-001"
+    assert findings[0]["type"] == "ssrf"
+    assert findings[0]["severity"] == "HIGH"
+    assert findings[0]["line"] == 4
