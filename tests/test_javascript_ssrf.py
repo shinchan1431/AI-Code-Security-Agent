@@ -60,3 +60,45 @@ def test_javascript_ssrf_function_parameter_detection():
     assert findings[0]["type"] == "ssrf"
     assert findings[0]["severity"] == "HIGH"
     assert findings[0]["line"] == 4
+
+def test_javascript_ssrf_url_constructor_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_ssrf_url_transform.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+
+    assert findings[0]["rule_id"] == "JS-SSRF-001"
+    assert findings[0]["type"] == "ssrf"
+    assert findings[0]["severity"] == "HIGH"
+    assert findings[0]["line"] == 5
+
+def test_javascript_ssrf_url_constructor_safe():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "javascript_ssrf_url_transform_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
+def test_javascript_ssrf_string_concatenation_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_ssrf_string_concat.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+
+    assert findings[0]["rule_id"] == "JS-SSRF-001"
+    assert findings[0]["type"] == "ssrf"
+    assert findings[0]["severity"] == "HIGH"
+    assert findings[0]["line"] == 5

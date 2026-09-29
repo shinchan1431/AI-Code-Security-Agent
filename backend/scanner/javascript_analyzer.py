@@ -197,6 +197,21 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         if ssrf_input_match:
             ssrf_variables.add(ssrf_input_match.group(1))
 
+        # Track URL objects created from SSRF-tainted values.
+        # Example:
+        # const target = request.query.url;
+        # const url = new URL(target);
+        url_constructor_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
+            r"new\s+URL\s*\(\s*([A-Za-z_$][\w$]*)\s*",
+            line,
+        )
+
+        if (
+            url_constructor_match
+            and url_constructor_match.group(2) in ssrf_variables
+        ):
+            ssrf_variables.add(url_constructor_match.group(1))
 
         # Detect server-side HTTP requests using user-controlled destinations.
         ssrf_match = re.search(
