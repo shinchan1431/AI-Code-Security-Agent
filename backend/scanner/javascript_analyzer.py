@@ -47,6 +47,41 @@ class TaintState:
 
     def contains_property(self, property_name: str) -> bool:
         return property_name in self.object_properties
+    def propagate_function_return(
+        self,
+        variable_name: str,
+        function_name: str,
+        arguments: list[str],
+        function_definitions: dict,
+    ) -> bool:
+        """Propagate taint through a function that returns a parameter."""
+        function_info = function_definitions.get(function_name)
+
+        if not function_info:
+            return False
+
+        returned_parameter = function_info.get("returns_parameter")
+
+        if not returned_parameter:
+            return False
+
+        try:
+            parameter_index = function_info["parameters"].index(
+                returned_parameter
+            )
+        except ValueError:
+            return False
+
+        if parameter_index >= len(arguments):
+            return False
+
+        argument = arguments[parameter_index].strip()
+
+        if self.is_tainted(argument):
+            self.add(variable_name)
+            return True
+
+        return False
 
 from backend.scanner.rules import (
     create_command_injection_finding,
@@ -193,6 +228,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                             set(),
                         ).add(parameters[index])
     for line_number, line in enumerate(lines, start=1):
+        effective_tainted_variables = set(user_controlled_variables)
         # Track user-controlled property keys.
         property_key_match = re.search(
             r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*"
@@ -437,24 +473,12 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 function_info = function_definitions.get(called_function)
 
                 if function_info:
-                    returned_parameter = function_info.get(
-                        "returns_parameter"
+                    taint_state.propagate_function_return(
+                        variable_name,
+                        called_function,
+                        arguments,
+                        function_definitions,
                     )
-
-                    if returned_parameter:
-                        try:
-                            parameter_index = function_info[
-                                "parameters"
-                            ].index(returned_parameter)
-                        except ValueError:
-                            parameter_index = -1
-
-                        if (
-                            0 <= parameter_index < len(arguments)
-                            and arguments[parameter_index]
-                            in effective_tainted_variables
-                        ):
-                            user_controlled_variables.add(variable_name)
 
             else:
                 # Non-function expressions can inherit taint from
