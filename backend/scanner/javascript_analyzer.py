@@ -54,32 +54,53 @@ class TaintState:
         arguments: list[str],
         function_definitions: dict,
     ) -> bool:
-        """Propagate taint through a function that returns a parameter."""
+        """Propagate taint through a function return expression."""
         function_info = function_definitions.get(function_name)
 
         if not function_info:
             return False
 
         returned_parameter = function_info.get("returns_parameter")
+        return_expression = function_info.get("return_expression")
 
-        if not returned_parameter:
+        if not returned_parameter and not return_expression:
             return False
 
-        try:
-            parameter_index = function_info["parameters"].index(
-                returned_parameter
-            )
-        except ValueError:
+        parameters = function_info.get("parameters", [])
+
+        if returned_parameter:
+            try:
+                parameter_index = parameters.index(returned_parameter)
+            except ValueError:
+                return False
+
+            if parameter_index >= len(arguments):
+               return False
+
+            argument = arguments[parameter_index].strip()
+
+            if self.is_tainted(argument):
+                self.add(variable_name)
+                return True
+
             return False
 
-        if parameter_index >= len(arguments):
-            return False
+        if return_expression:
+            for parameter_index, parameter in enumerate(parameters):
+                if parameter_index >= len(arguments):
+                    continue
 
-        argument = arguments[parameter_index].strip()
+                argument = arguments[parameter_index].strip()
 
-        if self.is_tainted(argument):
-            self.add(variable_name)
-            return True
+                if not self.is_tainted(argument):
+                    continue
+
+                if re.search(
+                    rf"\b{re.escape(parameter)}\b",
+                    return_expression,
+                ):
+                    self.add(variable_name)
+                    return True
 
         return False
 
@@ -128,9 +149,11 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     lines = source_code.splitlines()
 
     # Track simple function definitions and their parameter ranges.
+
     function_definitions = {}
 
     for index, line in enumerate(lines):
+
         function_match = re.search(
             r"\bfunction\s+([A-Za-z_$][\w$]*)\s*\(([^)]*)\)",
             line,
@@ -140,6 +163,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             continue
 
         function_name = function_match.group(1)
+
         parameters = [
             parameter.strip()
             for parameter in function_match.group(2).split(",")
@@ -155,23 +179,33 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 lines[end_line].count("{")
                 - lines[end_line].count("}")
             )
+
         returns_parameter = None
+        return_expression = None
 
         for function_line in lines[index : end_line + 1]:
             return_match = re.search(
-                r"\breturn\s+([A-Za-z_$][\w$]*)\s*;?",
+                r"\breturn\s+(.+?)\s*;?\s*$",
                 function_line,
             )
 
-            if return_match and return_match.group(1) in parameters:
-                returns_parameter = return_match.group(1)
-                break
+            if not return_match:
+                continue
+
+            expression = return_match.group(1).strip()
+            return_expression = expression
+
+            if expression in parameters:
+                returns_parameter = expression
+
+            break
 
         function_definitions[function_name] = {
             "parameters": parameters,
             "start": index,
             "end": end_line,
             "returns_parameter": returns_parameter,
+            "return_expression": return_expression,
         }
 
     # Identify which function parameters receive user-controlled arguments.
