@@ -1,4 +1,52 @@
 import re
+class TaintState:
+    """Track variables and properties that carry user-controlled data."""
+
+    def __init__(self):
+        self.variables = set()
+        self.object_properties = set()
+
+    def add(self, variable_name: str) -> None:
+        self.variables.add(variable_name)
+
+    def remove(self, variable_name: str) -> None:
+        self.variables.discard(variable_name)
+
+    def contains(self, variable_name: str) -> bool:
+        return variable_name in self.variables
+
+    def is_tainted(self, variable_name: str) -> bool:
+        """Return whether a variable currently carries tainted data."""
+        return variable_name in self.variables
+
+    def propagate_from_expression(
+        self,
+        variable_name: str,
+        expression: str,
+        additional_tainted_variables=None,
+    ) -> bool:
+        """Propagate taint when an expression references a tainted variable."""
+        tainted_variables = set(self.variables)
+
+        if additional_tainted_variables:
+            tainted_variables.update(additional_tainted_variables)
+
+
+        for tainted_variable in tainted_variables:
+            if re.search(
+                rf"\b{re.escape(tainted_variable)}\b",
+                expression,
+            ):
+                self.add(variable_name)
+                return True
+
+        return False
+
+    def add_property(self, property_name: str) -> None:
+        self.object_properties.add(property_name)
+
+    def contains_property(self, property_name: str) -> bool:
+        return property_name in self.object_properties
 
 from backend.scanner.rules import (
     create_command_injection_finding,
@@ -19,8 +67,11 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     """
 
     findings = []
-    user_controlled_variables = set()
-    tainted_object_properties = set()
+    taint_state = TaintState()
+
+    user_controlled_variables = taint_state.variables
+    tainted_object_properties = taint_state.object_properties
+
     tainted_function_parameters = {}
     prototype_pollution_keys = set()
     path_traversal_variables = set()
@@ -119,7 +170,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                     # Check whether the argument is already tainted.
                     # This allows SSRF and other data-flow taint to cross
                     # function boundaries.
-                    argument_is_tainted = argument in user_controlled_variables
+                    argument_is_tainted = taint_state.is_tainted(argument)
 
                     # Also check whether the argument is directly assigned
                     # from an obvious user-controlled source.
@@ -325,15 +376,12 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 user_controlled_variables.add(variable_name)
 
             # Derived from an already-tainted variable → tainted.
-            elif any(
-                re.search(
-                    rf"\b{re.escape(tainted_variable)}\b",
-                    assigned_expression,
-                )
-                for tainted_variable in user_controlled_variables
+            elif taint_state.propagate_from_expression(
+                variable_name,
+                assigned_expression,
+                effective_tainted_variables,
             ):
-                user_controlled_variables.add(variable_name)
-
+                pass
             # Otherwise the previous taint is cleared.
             else:
                 user_controlled_variables.discard(variable_name)
@@ -411,13 +459,11 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             else:
                 # Non-function expressions can inherit taint from
                 # already-tainted variables.
-                for tainted_variable in effective_tainted_variables:
-                    if re.search(
-                        rf"\b{re.escape(tainted_variable)}\b",
-                        assigned_expression,
-                    ):
-                        user_controlled_variables.add(variable_name)
-                        break
+                taint_state.propagate_from_expression(
+                    variable_name,
+                    assigned_expression,
+                    effective_tainted_variables,
+                )
         # Detect JavaScript eval()
         if re.search(r"\beval\s*\(", line):
             finding = create_command_injection_finding(
