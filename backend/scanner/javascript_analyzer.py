@@ -75,7 +75,7 @@ class TaintState:
                 return False
 
             if parameter_index >= len(arguments):
-               return False
+                return False
 
             argument = arguments[parameter_index].strip()
 
@@ -86,6 +86,8 @@ class TaintState:
             return False
 
         if return_expression:
+            tainted_parameters = set()
+
             for parameter_index, parameter in enumerate(parameters):
                 if parameter_index >= len(arguments):
                     continue
@@ -99,8 +101,39 @@ class TaintState:
                     rf"\b{re.escape(parameter)}\b",
                     return_expression,
                 ):
-                    self.add(variable_name)
+                    tainted_parameters.add(parameter)
+
+            if not tainted_parameters:
+                 return False
+
+            # Handle returned objects such as:
+            #
+            # return {
+            #     name: value
+            # };
+            #
+            # If `value` is tainted, record `result.name`
+            # as a tainted object property.
+            object_return_match = re.search(
+                r"\{\s*([A-Za-z_$][\w$]*)\s*:\s*"
+                r"([A-Za-z_$][\w$]*)\s*\}",
+                return_expression,
+            )
+
+            if object_return_match:
+                property_name = object_return_match.group(1)
+                property_value = object_return_match.group(2)
+
+                if property_value in tainted_parameters:
+                    self.add_property(
+                        f"{variable_name}.{property_name}"
+                    )
                     return True
+
+            # Preserve existing behavior for normal returned
+            # expressions such as `value.trim()` or `"url=" + value`.
+            self.add(variable_name)
+            return True
 
         return False
 
@@ -183,7 +216,9 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         returns_parameter = None
         return_expression = None
 
-        for function_line in lines[index : end_line + 1]:
+        for return_index in range(index, end_line + 1):
+            function_line = lines[return_index]
+
             return_match = re.search(
                 r"\breturn\s+(.+?)\s*;?\s*$",
                 function_line,
@@ -193,13 +228,44 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 continue
 
             expression = return_match.group(1).strip()
+
+            # Support multiline returned objects such as:
+            #
+            # return {
+            #     name: value
+            # };
+            #
+            # Keep collecting lines until the object is closed.
+            if expression.startswith("{") and "}" not in expression:
+                return_lines = [expression]
+                object_depth = (
+                    expression.count("{") - expression.count("}")
+                )
+
+                next_index = return_index + 1
+
+                while (
+                    object_depth > 0
+                    and next_index <= end_line
+                ):
+                    next_line = lines[next_index].strip()
+                    return_lines.append(next_line)
+
+                    object_depth += (
+                        next_line.count("{")
+                        - next_line.count("}")
+                    )
+
+                    next_index += 1
+
+                expression = " ".join(return_lines).strip()
+
             return_expression = expression
 
             if expression in parameters:
                 returns_parameter = expression
 
             break
-
         function_definitions[function_name] = {
             "parameters": parameters,
             "start": index,
