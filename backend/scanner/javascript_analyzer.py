@@ -732,6 +732,48 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
                 findings.append(finding)
         # Track simple object properties that receive tainted values.
+        # Track aliases between objects that contain tainted properties.
+        #
+        # Example:
+        #
+        # const user = {
+        #     name: input
+        # };
+        #
+        # const profile = user;
+        #
+        # element.innerHTML = profile.name;
+        #
+        # If user.name is tainted, profile.name should also be
+        # considered tainted because profile aliases user.
+        object_alias_match = re.search(
+            r"^\s*(?:const|let|var)\s+"
+            r"([A-Za-z_$][\w$]*)\s*=\s*"
+            r"([A-Za-z_$][\w$]*)\s*;?\s*$",
+            line,
+        )
+
+        if object_alias_match:
+            alias_name = object_alias_match.group(1)
+            original_name = object_alias_match.group(2)
+
+            aliased_properties = [
+                property_reference
+                for property_reference in tainted_object_properties
+                if property_reference.startswith(
+                    f"{original_name}."
+                )
+            ]
+
+            for property_reference in aliased_properties:
+                property_name = property_reference.split(
+                    ".",
+                    1,
+                )[1]
+
+                tainted_object_properties.add(
+                    f"{alias_name}.{property_name}"
+                )
         object_property_match = re.search(
             r"^\s*([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*,?\s*$",
             line,
