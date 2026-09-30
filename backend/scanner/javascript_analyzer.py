@@ -732,6 +732,25 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
                 findings.append(finding)
         # Track simple object properties that receive tainted values.
+        # Clear previously tracked object-property taint when an
+        # object variable is reassigned to a new object.
+        object_reassignment_match = re.search(
+            r"^\s*([A-Za-z_$][\w$]*)\s*=\s*\{\s*$",
+            line,
+        )
+
+        if object_reassignment_match:
+            reassigned_object = object_reassignment_match.group(1)
+
+            tainted_object_properties.difference_update(
+                {
+                    property_reference
+                    for property_reference in tainted_object_properties
+                    if property_reference.startswith(
+                        f"{reassigned_object}."
+                    )
+                }
+            )
         # Track aliases between objects that contain tainted properties.
         #
         # Example:

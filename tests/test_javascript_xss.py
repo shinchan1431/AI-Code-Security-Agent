@@ -296,3 +296,31 @@ def test_javascript_xss_object_alias_safe():
     findings = analyze_javascript_file(str(fixture))
 
     assert findings == []
+def test_javascript_xss_object_alias_reassignment_safe():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "javascript_xss_object_alias_reassignment_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
+
+
+def test_javascript_xss_object_alias_reassignment_clears_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_alias_reassignment.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
