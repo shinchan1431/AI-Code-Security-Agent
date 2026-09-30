@@ -295,17 +295,20 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             ]
 
             for index, argument in enumerate(arguments):
-                if (
-                    index < len(parameters)
-                    and re.fullmatch(
-                        r"[A-Za-z_$][\w$]*",
-                        argument,
-                    )
+                if index >= len(parameters):
+                    continue
+
+                argument_is_tainted = False
+
+                # Plain variable argument, for example:
+                # render(input)
+                if re.fullmatch(
+                    r"[A-Za-z_$][\w$]*",
+                    argument,
                 ):
-                    # Check whether the argument is already tainted.
-                    # This allows SSRF and other data-flow taint to cross
-                    # function boundaries.
-                    argument_is_tainted = taint_state.is_tainted(argument)
+                    argument_is_tainted = taint_state.is_tainted(
+                        argument
+                    )
 
                     # Also check whether the argument is directly assigned
                     # from an obvious user-controlled source.
@@ -322,11 +325,99 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                                 argument_is_tainted = True
                                 break
 
-                    if argument_is_tainted:
-                        tainted_function_parameters.setdefault(
-                            function_name,
-                            set(),
-                        ).add(parameters[index])
+                # Object property argument, for example:
+                # render(user.name)
+                object_property_argument = re.fullmatch(
+                    r"([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)",
+                    argument,
+                )
+
+                if object_property_argument:
+                    object_name = object_property_argument.group(1)
+                    property_name = object_property_argument.group(2)
+
+                    property_reference = (
+                        f"{object_name}.{property_name}"
+                    )
+
+                    # Already-known tainted property.
+                    if taint_state.contains_property(
+                        property_reference
+                    ):
+                        argument_is_tainted = True
+
+                    # Look for an object literal property such as:
+                    #
+                    # const user = {
+                    #     name: input
+                    # };
+                    #
+                    # and determine whether its value comes from a
+                    # user-controlled source.
+                    if not argument_is_tainted:
+                        property_value = None
+
+                        for object_index, object_line in enumerate(lines):
+                            if re.search(
+                                rf"\b(?:const|let|var)\s+"
+                                rf"{re.escape(object_name)}\s*=\s*\{{",
+                                object_line,
+                            ):
+                                for property_index in range(
+                                    object_index + 1,
+                                    len(lines),
+                                ):
+                                    property_line = lines[property_index]
+
+                                    if re.search(
+                                        r"\}",
+                                        property_line,
+                                    ):
+                                        break
+
+                                    property_match = re.search(
+                                        rf"\b{re.escape(property_name)}"
+                                        rf"\s*:\s*"
+                                        rf"([A-Za-z_$][\w$]*)",
+                                        property_line,
+                                    )
+
+                                    if property_match:
+                                        property_value = (
+                                            property_match.group(1)
+                                        )
+                                        break
+
+                        if property_value:
+                            # Property value is already tainted.
+                            if taint_state.is_tainted(
+                                property_value
+                            ):
+                                argument_is_tainted = True
+
+                            # Or property value is directly assigned from
+                            # a user-controlled request/location source.
+                            if not argument_is_tainted:
+                                for source_line in lines:
+                                    if re.search(
+                                        rf"\b(?:const|let|var)\s+"
+                                        rf"{re.escape(property_value)}"
+                                        rf"\s*=\s*"
+                                        r"(?:request\."
+                                        r"(?:query|body|params)\."
+                                        r"[A-Za-z_$][\w$]*|"
+                                        r"window\.location"
+                                        r"(?:\.[A-Za-z_$][\w$]*)?)",
+                                        source_line,
+                                    ):
+                                        argument_is_tainted = True
+                                        break
+
+                if argument_is_tainted:
+                    tainted_function_parameters.setdefault(
+                        function_name,
+                        set(),
+                    ).add(parameters[index])
     for line_number, line in enumerate(lines, start=1):
         effective_tainted_variables = set(user_controlled_variables)
         # Track user-controlled property keys.
