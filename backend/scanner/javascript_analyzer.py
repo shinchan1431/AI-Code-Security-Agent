@@ -793,6 +793,53 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 tainted_object_properties.add(
                     f"{alias_name}.{property_name}"
                 )
+        # Update taint when an existing object property is reassigned.
+        property_assignment_match = re.search(
+            r"^\s*([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*=\s*(.+?)\s*;?\s*$",
+            line,
+        )
+
+        if property_assignment_match:
+            object_name = property_assignment_match.group(1)
+            property_name = property_assignment_match.group(2)
+            assigned_expression = property_assignment_match.group(3).strip()
+            property_reference = f"{object_name}.{property_name}"
+
+            assigned_variable_match = re.fullmatch(
+                r"[A-Za-z_$][\w$]*",
+                assigned_expression,
+            )
+
+            assigned_property_match = re.fullmatch(
+                r"[A-Za-z_$][\w$]*\.[A-Za-z_$][\w$]*",
+                assigned_expression,
+            )
+
+            assigned_value_is_tainted = (
+                assigned_expression in effective_tainted_variables
+                or assigned_expression in tainted_object_properties
+                or (
+                    assigned_variable_match
+                    and assigned_expression in effective_tainted_variables
+                )
+                or (
+                    assigned_property_match
+                    and assigned_expression in tainted_object_properties
+                )
+                or bool(
+                    re.search(
+                        r"\b(?:request|req)\.(?:query|body|params)\b",
+                        assigned_expression,
+                    )
+                )
+            )
+
+            if assigned_value_is_tainted:
+                tainted_object_properties.add(property_reference)
+            else:
+                tainted_object_properties.discard(property_reference)
+
+
         object_property_match = re.search(
             r"^\s*([A-Za-z_$][\w$]*)\s*:\s*([A-Za-z_$][\w$]*)\s*,?\s*$",
             line,

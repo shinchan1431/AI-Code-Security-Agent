@@ -329,7 +329,7 @@ def test_javascript_xss_object_alias_reassignment_clears_taint():
 
     assert xss_findings == []
 
-    
+
 def test_javascript_xss_tracks_only_tainted_object_property():
     fixture = (
         Path(__file__).parent
@@ -366,3 +366,39 @@ def test_javascript_xss_does_not_cross_taint_between_objects():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 12
+
+
+def test_javascript_xss_safe_object_property_reassignment():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "javascript_xss_property_reassignment_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
+
+def test_javascript_xss_detects_tainted_object_property_reassignment():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_property_reassignment_tainted.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 9
