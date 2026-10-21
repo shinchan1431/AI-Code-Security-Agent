@@ -402,3 +402,77 @@ def test_javascript_xss_detects_tainted_object_property_reassignment():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 9
+
+def test_javascript_xss_object_mutated_by_function():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_mutated_by_function.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["type"] == "xss"
+    assert xss_findings[0]["severity"] == "HIGH"
+    assert xss_findings[0]["line"] == 10
+
+
+def test_javascript_xss_object_mutated_by_function_safe_input():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_mutated_by_function_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
+
+
+def test_javascript_xss_object_mutated_by_function_safe_overwrite():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_mutated_by_function_safe_overwrite.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
+
+def test_javascript_xss_detected_before_safe_function_overwrite():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_mutation_sink_before_safe_overwrite.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 10
