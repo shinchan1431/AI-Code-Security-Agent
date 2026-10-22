@@ -493,3 +493,60 @@ def test_javascript_xss_same_line_safe_function_overwrite():
     ]
 
     assert xss_findings == []
+
+
+def test_javascript_xss_function_multiple_calls_keep_object_taint_separate():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_function_multiple_calls.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 7
+
+
+def test_javascript_xss_function_taint_then_safe_overwrite():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_function_taint_then_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 8
+
+
+def test_javascript_xss_function_safe_then_tainted_overwrite():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_function_safe_then_taint.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 11
