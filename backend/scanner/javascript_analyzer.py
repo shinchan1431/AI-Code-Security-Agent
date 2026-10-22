@@ -419,6 +419,129 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                         set(),
                     ).add(parameters[index])
     for line_number, line in enumerate(lines, start=1):
+        # Propagate object-property taint through function mutations.
+        # Process calls in source order so a safe overwrite clears taint.
+        for function_name, function_info in function_definitions.items():
+            current_index = line_number - 1
+
+            # Do not interpret function declarations or body lines as calls.
+            if (
+                function_info["start"]
+                <= current_index
+                <= function_info["end"]
+            ):
+                continue
+
+            for call_match in re.finditer(
+                rf"\b{re.escape(function_name)}\s*\(([^)]*)\)",
+                line,
+            ):
+                arguments = [
+                    argument.strip()
+                    for argument in call_match.group(1).split(",")
+                ]
+                parameters = function_info["parameters"]
+
+                for body_index in range(
+                    function_info["start"],
+                    function_info["end"] + 1,
+                ):
+                    mutation_match = re.search(
+                        r"\b([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)"
+                        r"\s*=\s*(.+?)\s*;?\s*$",
+                        lines[body_index],
+                    )
+
+                    if not mutation_match:
+                        continue
+
+                    object_parameter = mutation_match.group(1)
+                    property_name = mutation_match.group(2)
+                    assigned_expression = mutation_match.group(3).strip()
+
+                    if object_parameter not in parameters:
+                        continue
+
+                    object_index = parameters.index(object_parameter)
+                    if object_index >= len(arguments):
+                        continue
+
+                    object_argument = arguments[object_index]
+                    if not re.fullmatch(
+                        r"[A-Za-z_$][\w$]*",
+                        object_argument,
+                    ):
+                        continue
+
+                    value_is_tainted = bool(
+                        re.search(
+                            r"\b(?:request|req)\."
+                            r"(?:query|body|params)\."
+                            r"[A-Za-z_$][\w$]*",
+                            assigned_expression,
+                        )
+                    ) or bool(
+                        re.search(
+                            r"\bwindow\.location\b",
+                            assigned_expression,
+                        )
+                    )
+
+                    if (
+                        not value_is_tainted
+                        and assigned_expression in parameters
+                    ):
+                        value_index = parameters.index(
+                            assigned_expression
+                        )
+
+                        if value_index < len(arguments):
+                            value_argument = arguments[value_index]
+
+                            value_is_tainted = bool(
+                                re.search(
+                                    r"\b(?:request|req)\."
+                                    r"(?:query|body|params)\."
+                                    r"[A-Za-z_$][\w$]*",
+                                    value_argument,
+                                )
+                            ) or bool(
+                                re.search(
+                                    r"\bwindow\.location\b",
+                                    value_argument,
+                                )
+                            )
+
+                            if re.fullmatch(
+                                r"[A-Za-z_$][\w$]*",
+                                value_argument,
+                            ):
+                                value_is_tainted = (
+                                    value_is_tainted
+                                    or value_argument
+                                    in user_controlled_variables
+                                )
+
+                            if re.fullmatch(
+                                r"[A-Za-z_$][\w$]*\."
+                                r"[A-Za-z_$][\w$]*",
+                                value_argument,
+                            ):
+                                value_is_tainted = (
+                                    value_is_tainted
+                                    or value_argument
+                                    in tainted_object_properties
+                                )
+
+                    property_reference = (
+                        f"{object_argument}.{property_name}"
+                    )
+
+                    if value_is_tainted:
+                        tainted_object_properties.add(property_reference)
+                    else:
+                        tainted_object_properties.discard(property_reference)
+
         effective_tainted_variables = set(user_controlled_variables)
         # Track user-controlled property keys.
         property_key_match = re.search(
