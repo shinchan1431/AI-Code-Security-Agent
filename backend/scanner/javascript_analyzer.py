@@ -504,6 +504,8 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             })
 
 
+    object_alias_groups = {}
+
     for line_number, line in enumerate(lines, start=1):
         # Propagate object-property taint through function mutations.
         # Process calls in source order so a safe overwrite clears taint.
@@ -980,6 +982,23 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         if object_reassignment_match:
             reassigned_object = object_reassignment_match.group(1)
 
+            # Reassignment to a new object breaks this variable's
+            # previous alias relationship.
+            previous_group = set(
+                object_alias_groups.get(
+                    reassigned_object,
+                    {reassigned_object},
+                )
+            )
+            remaining_group = previous_group - {reassigned_object}
+
+            for member in remaining_group:
+                object_alias_groups[member] = remaining_group
+
+            object_alias_groups[reassigned_object] = {
+                reassigned_object
+            }
+
             tainted_object_properties.difference_update(
                 {
                     property_reference
@@ -989,20 +1008,8 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                     )
                 }
             )
-        # Track aliases between objects that contain tainted properties.
-        #
-        # Example:
-        #
-        # const user = {
-        #     name: input
-        # };
-        #
-        # const profile = user;
-        #
-        # element.innerHTML = profile.name;
-        #
-        # If user.name is tainted, profile.name should also be
-        # considered tainted because profile aliases user.
+        # Track aliases between objects, including aliases created
+        # before their properties become tainted.
         object_alias_match = re.search(
             r"^\s*(?:const|let|var)\s+"
             r"([A-Za-z_$][\w$]*)\s*=\s*"
@@ -1014,23 +1021,35 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             alias_name = object_alias_match.group(1)
             original_name = object_alias_match.group(2)
 
+            alias_group = set(
+                object_alias_groups.get(alias_name, {alias_name})
+            )
+            original_group = set(
+                object_alias_groups.get(original_name, {original_name})
+            )
+            merged_group = alias_group | original_group
+
+            for member in merged_group:
+                object_alias_groups[member] = merged_group
+
+            # Synchronize properties already known to be tainted.
             aliased_properties = [
                 property_reference
                 for property_reference in tainted_object_properties
-                if property_reference.startswith(
-                    f"{original_name}."
+                if any(
+                    property_reference.startswith(f"{member}.")
+                    for member in merged_group
                 )
             ]
 
             for property_reference in aliased_properties:
-                property_name = property_reference.split(
-                    ".",
-                    1,
-                )[1]
+                property_name = property_reference.split(".", 1)[1]
 
-                tainted_object_properties.add(
-                    f"{alias_name}.{property_name}"
-                )
+                for member in merged_group:
+                    tainted_object_properties.add(
+                        f"{member}.{property_name}"
+                    )
+
         # Update taint when an existing object property is reassigned.
         property_assignment_match = re.search(
             r"^\s*([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*=\s*(.+?)\s*;?\s*$",
@@ -1072,14 +1091,25 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 )
             )
 
+            object_aliases = object_alias_groups.get(
+                object_name,
+                {object_name},
+            )
+
             if assigned_value_is_tainted:
-                tainted_object_properties.add(property_reference)
+                for alias in object_aliases:
+                    tainted_object_properties.add(
+                        f"{alias}.{property_name}"
+                    )
             elif (
                 not conditional_line_flags[line_number - 1]
                 or line_number - 1 in paired_safe_conditional_lines
             ):
                 # Only clear taint for an unconditional safe overwrite.
-                tainted_object_properties.discard(property_reference)
+                for alias in object_aliases:
+                    tainted_object_properties.discard(
+                        f"{alias}.{property_name}"
+                    )
 
 
         object_property_match = re.search(

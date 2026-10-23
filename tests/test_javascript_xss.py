@@ -641,3 +641,22 @@ def test_javascript_xss_unconditional_safe_overwrite_clears_taint():
     ]
 
     assert xss_findings == []
+
+
+def test_javascript_xss_object_alias_tainted_after_alias_creation():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_alias_taint_after_alias.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 5
