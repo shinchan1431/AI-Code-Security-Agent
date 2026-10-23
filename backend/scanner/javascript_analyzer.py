@@ -418,6 +418,39 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                         function_name,
                         set(),
                     ).add(parameters[index])
+    # Mark lines inside common brace-delimited control-flow blocks.
+    # This conservative approximation avoids clearing taint when a
+    # conditional safe overwrite might not execute.
+    conditional_block_depths = []
+    conditional_line_flags = [False] * len(lines)
+    brace_depth = 0
+
+    for source_index, source_line in enumerate(lines):
+        while (
+            conditional_block_depths
+            and brace_depth < conditional_block_depths[-1]
+        ):
+            conditional_block_depths.pop()
+
+        conditional_line_flags[source_index] = bool(
+            conditional_block_depths
+        )
+
+        opening_braces = source_line.count("{")
+        closing_braces = source_line.count("}")
+        next_depth = brace_depth + opening_braces - closing_braces
+
+        is_control_header = re.match(
+            r"^\s*(?:}\s*)?(?:if\s*\(|else\b|switch\s*\(|"
+            r"for\s*\(|while\s*\(|catch\s*\().*\{",
+            source_line,
+        )
+
+        if is_control_header and next_depth > brace_depth:
+            conditional_block_depths.append(next_depth)
+
+        brace_depth = next_depth
+
     for line_number, line in enumerate(lines, start=1):
         # Propagate object-property taint through function mutations.
         # Process calls in source order so a safe overwrite clears taint.
@@ -988,7 +1021,8 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
             if assigned_value_is_tainted:
                 tainted_object_properties.add(property_reference)
-            else:
+            elif not conditional_line_flags[line_number - 1]:
+                # Only clear taint for an unconditional safe overwrite.
                 tainted_object_properties.discard(property_reference)
 
 
