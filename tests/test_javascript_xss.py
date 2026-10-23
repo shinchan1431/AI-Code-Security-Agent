@@ -588,3 +588,56 @@ def test_javascript_xss_conditional_safe_overwrite_preserves_possible_taint():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 8
+
+def test_javascript_xss_if_else_both_safe_overwrites_clear_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_if_else_both_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
+
+
+def test_javascript_xss_nested_if_else_preserves_possible_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_nested_if_else_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+
+
+def test_javascript_xss_unconditional_safe_overwrite_clears_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_conditional_then_unconditional_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []

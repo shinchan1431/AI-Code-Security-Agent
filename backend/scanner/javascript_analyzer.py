@@ -451,6 +451,59 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
         brace_depth = next_depth
 
+    # Recognize only simple, adjacent if/else branches that both assign
+    # quoted string literals to the same property. This is deliberately
+    # not a general JavaScript parser.
+    paired_safe_conditional_lines = set()
+    identifier_pattern = r"[A-Za-z_$][\w$]*"
+    safe_literal_pattern = r"""(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')"""
+
+    for branch_index in range(len(lines) - 4):
+        if not re.match(
+            r"^\s*if\s*\(.+\)\s*\{\s*$",
+            lines[branch_index],
+        ):
+            continue
+        if conditional_line_flags[branch_index]:
+            continue
+
+        first_assignment = re.match(
+            rf"^\s*({identifier_pattern})\.({identifier_pattern})"
+            rf"\s*=\s*({safe_literal_pattern})\s*;?\s*$",
+            lines[branch_index + 1],
+        )
+        else_header = re.match(
+            r"^\s*\}\s*else\s*\{\s*$",
+            lines[branch_index + 2],
+        )
+        second_assignment = re.match(
+            rf"^\s*({identifier_pattern})\.({identifier_pattern})"
+            rf"\s*=\s*({safe_literal_pattern})\s*;?\s*$",
+            lines[branch_index + 3],
+        )
+        closing_brace = re.match(
+            r"^\s*\}\s*;?\s*$",
+            lines[branch_index + 4],
+        )
+
+        if not all((
+            first_assignment,
+            else_header,
+            second_assignment,
+            closing_brace,
+        )):
+            continue
+
+        first_property = first_assignment.group(1, 2)
+        second_property = second_assignment.group(1, 2)
+
+        if first_property == second_property:
+            paired_safe_conditional_lines.update({
+                branch_index + 1,
+                branch_index + 3,
+            })
+
+
     for line_number, line in enumerate(lines, start=1):
         # Propagate object-property taint through function mutations.
         # Process calls in source order so a safe overwrite clears taint.
@@ -1021,7 +1074,10 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
             if assigned_value_is_tainted:
                 tainted_object_properties.add(property_reference)
-            elif not conditional_line_flags[line_number - 1]:
+            elif (
+                not conditional_line_flags[line_number - 1]
+                or line_number - 1 in paired_safe_conditional_lines
+            ):
                 # Only clear taint for an unconditional safe overwrite.
                 tainted_object_properties.discard(property_reference)
 
