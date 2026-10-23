@@ -532,7 +532,36 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                                     or value_argument
                                     in tainted_object_properties
                                 )
+                    # Propagate taint when copying a property from
+                    # another object passed to the function.
+                    property_source_match = re.fullmatch(
+                        r"([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)",
+                        assigned_expression,
+                    )
 
+                    if property_source_match:
+                        source_parameter = property_source_match.group(1)
+                        source_property = property_source_match.group(2)
+
+                        if source_parameter in parameters:
+                            source_index = parameters.index(
+                                source_parameter
+                            )
+
+                            if source_index < len(arguments):
+                                source_argument = arguments[source_index]
+
+                                if re.fullmatch(
+                                    r"[A-Za-z_$][\w$]*",
+                                    source_argument,
+                                ):
+                                    value_is_tainted = (
+                                        value_is_tainted
+                                        or (
+                                            f"{source_argument}.{source_property}"
+                                            in tainted_object_properties
+                                        )
+                                    )
                     property_reference = (
                         f"{object_argument}.{property_name}"
                     )

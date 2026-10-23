@@ -550,3 +550,22 @@ def test_javascript_xss_function_safe_then_tainted_overwrite():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 11
+
+
+def test_javascript_xss_detects_tainted_cross_object_property_copy():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_cross_object_property_copy.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 14
