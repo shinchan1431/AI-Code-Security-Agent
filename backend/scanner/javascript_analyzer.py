@@ -717,7 +717,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             variable_name = reassignment_match.group(1)
             assigned_expression = reassignment_match.group(2)
 
-            # User-controlled source â†’ tainted.
+            # User-controlled source -> tainted.
             if re.search(
                 r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
                 r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
@@ -725,7 +725,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             ):
                 user_controlled_variables.add(variable_name)
 
-            # Derived from an already-tainted variable â†’ tainted.
+            # Derived from an already-tainted variable -> tainted.
             elif taint_state.propagate_from_expression(
                 variable_name,
                 assigned_expression,
