@@ -660,3 +660,22 @@ def test_javascript_xss_object_alias_tainted_after_alias_creation():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 5
+
+
+def test_javascript_xss_alias_reassignment_preserves_original_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_alias_reassignment_preserves_original.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 11

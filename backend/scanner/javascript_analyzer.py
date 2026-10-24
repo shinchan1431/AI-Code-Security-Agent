@@ -975,7 +975,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         # Clear previously tracked object-property taint when an
         # object variable is reassigned to a new object.
         object_reassignment_match = re.search(
-            r"^\s*([A-Za-z_$][\w$]*)\s*=\s*\{\s*$",
+            r"^\s*([A-Za-z_$][\w$]*)\s*=\s*\{",
             line,
         )
 
