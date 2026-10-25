@@ -679,3 +679,97 @@ def test_javascript_xss_alias_reassignment_preserves_original_taint():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 11
+
+
+def test_javascript_xss_shared_alias_safe_property_overwrite_clears_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_shared_alias_safe_property_overwrite.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
+
+
+def test_javascript_xss_shared_alias_tainted_overwrite_propagates_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_shared_alias_tainted_overwrite.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 12
+
+
+def test_javascript_xss_multiple_alias_reassignment_preserves_remaining_aliases():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_multiple_alias_reassignment.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 2
+    assert [finding["line"] for finding in xss_findings] == [14, 15]
+
+
+def test_javascript_xss_tainted_property_copy_through_alias():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_tainted_property_copy_through_alias.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 15
+
+
+def test_javascript_xss_chained_property_copy_propagates_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_chained_property_copy.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 18
