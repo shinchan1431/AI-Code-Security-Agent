@@ -773,3 +773,67 @@ def test_javascript_xss_chained_property_copy_propagates_taint():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 18
+
+def test_javascript_xss_nested_object_property():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_nested_object_property.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 7
+def test_javascript_xss_nested_property_safe_overwrite_clears_taint():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_nested_safe_overwrite.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
+
+def test_javascript_xss_nested_object_property_with_brace_in_string():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_nested_brace_string.js"
+    )
+    findings = analyze_javascript_file(str(fixture))
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 8
+
+def test_javascript_xss_nested_object_property_with_multiline_comment():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_multiline_comment.js"
+    )
+    findings = analyze_javascript_file(str(fixture))
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 10

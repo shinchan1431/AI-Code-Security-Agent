@@ -1,4 +1,51 @@
 import re
+
+
+def _count_closing_braces_outside_strings(
+    line: str,
+    in_block_comment: bool = False,
+) -> tuple[int, bool]:
+    """Count closing braces outside strings and comments."""
+    closing_braces = 0
+    quote = None
+    escaped = False
+    index = 0
+
+    while index < len(line):
+        char = line[index]
+        next_char = line[index + 1] if index + 1 < len(line) else ""
+
+        if in_block_comment:
+            if char == "*" and next_char == "/":
+                in_block_comment = False
+                index += 2
+                continue
+            index += 1
+            continue
+
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+        elif char in ("'", '"', "`"):
+            quote = char
+        elif char == "/" and next_char == "/":
+            break
+        elif char == "/" and next_char == "*":
+            in_block_comment = True
+            index += 2
+            continue
+        elif char == "}":
+            closing_braces += 1
+
+        index += 1
+
+    return closing_braces, in_block_comment
+
+
 class TaintState:
     """Track variables and properties that carry user-controlled data."""
 
@@ -180,6 +227,71 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         ]
 
     lines = source_code.splitlines()
+
+    # Track tainted values inside multiline nested object literals.
+    nested_object_stack = []
+    in_block_comment = False
+
+    for object_line in lines:
+        root_object_match = re.match(
+            r"^\s*(?:const|let|var)\s+"
+            r"([A-Za-z_$][\w$]*)\s*=\s*\{\s*$",
+            object_line,
+        )
+
+        if root_object_match:
+            nested_object_stack.append(
+                (root_object_match.group(1), [])
+            )
+            continue
+
+        nested_property_match = re.match(
+            r"^\s*([A-Za-z_$][\w$]*)\s*:\s*\{\s*$",
+            object_line,
+        )
+
+        if nested_property_match and nested_object_stack:
+            root_name, property_path = nested_object_stack[-1]
+            nested_object_stack.append(
+                (
+                    root_name,
+                    property_path
+                    + [nested_property_match.group(1)],
+                )
+            )
+            continue
+
+        leaf_property_match = re.match(
+            r"^\s*([A-Za-z_$][\w$]*)\s*:\s*(.+?)\s*,?\s*$",
+            object_line,
+        )
+
+        if leaf_property_match and nested_object_stack:
+            property_name = leaf_property_match.group(1)
+            property_value = leaf_property_match.group(2)
+
+            if re.search(
+                r"\b(?:request|req)\."
+                r"(?:query|body|params)\b|"
+                r"\bwindow\.location\b",
+                property_value,
+            ):
+                root_name, property_path = nested_object_stack[-1]
+                full_property_path = ".".join(
+                    [root_name] + property_path + [property_name]
+                )
+                tainted_object_properties.add(full_property_path)
+    # Preserve block-comment state between source lines.
+    closing_braces, in_block_comment = (
+        _count_closing_braces_outside_strings(
+            object_line,
+            in_block_comment,
+        )
+    )
+
+    for _ in range(closing_braces):
+        if nested_object_stack:
+            nested_object_stack.pop()
 
     # Track simple function definitions and their parameter ranges.
 
@@ -1049,7 +1161,39 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                     tainted_object_properties.add(
                         f"{member}.{property_name}"
                     )
+        # Track reassignment of deeply nested object properties.
+        nested_assignment_match = re.search(
+            r"^\s*((?:[A-Za-z_$][\w$]*\.){2,}[A-Za-z_$][\w$]*)"
+            r"\s*=\s*(.+?)\s*;?\s*$",
+            line,
+        )
 
+        if nested_assignment_match:
+            nested_property_path = nested_assignment_match.group(1)
+            nested_assigned_expression = (
+                nested_assignment_match.group(2).strip()
+            )
+
+            nested_value_is_tainted = (
+                nested_assigned_expression in user_controlled_variables
+                or nested_assigned_expression in tainted_object_properties
+                or bool(
+                    re.search(
+                        r"\b(?:request|req)\."
+                        r"(?:query|body|params)\b|"
+                        r"\bwindow\.location\b",
+                        nested_assigned_expression,
+                    )
+                )
+            )
+
+            if nested_value_is_tainted:
+                tainted_object_properties.add(nested_property_path)
+            elif (
+                not conditional_line_flags[line_number - 1]
+                or line_number - 1 in paired_safe_conditional_lines
+            ):
+                tainted_object_properties.discard(nested_property_path)
         # Update taint when an existing object property is reassigned.
         property_assignment_match = re.search(
             r"^\s*([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)\s*=\s*(.+?)\s*;?\s*$",
@@ -1142,20 +1286,20 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         # when their input is user-controlled.
         xss_patterns = [
             (
-                r"\.innerHTML\s*=\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*;?",
+                r"\.innerHTML\s*=\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;?",
                 "JavaScript innerHTML assignment detected.",
             ),
             (
-                r"\.outerHTML\s*=\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*;?",
+                r"\.outerHTML\s*=\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*;?",
                 "JavaScript outerHTML assignment detected.",
             ),
             (
                r"\.insertAdjacentHTML\s*\(\s*[^,]+,\s*"
-               r"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*\)",
+               r"([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\)",
                "JavaScript insertAdjacentHTML() call detected.",
             ),
             (
-                r"\bdocument\.write\s*\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)?)\s*\)",
+                r"\bdocument\.write\s*\(\s*([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*\)",
                 "JavaScript document.write() call detected.",
             ),
         ]
