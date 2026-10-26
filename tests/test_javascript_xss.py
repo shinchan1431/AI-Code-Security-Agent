@@ -791,6 +791,8 @@ def test_javascript_xss_nested_object_property():
 
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 7
+
+
 def test_javascript_xss_nested_property_safe_overwrite_clears_taint():
     fixture = (
         Path(__file__).parent
@@ -837,3 +839,45 @@ def test_javascript_xss_nested_object_property_with_multiline_comment():
     ]
     assert len(xss_findings) == 1
     assert xss_findings[0]["line"] == 10
+
+
+def test_javascript_xss_array_index_taint_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_index.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+    assert findings[0]["rule_id"] == "JS-XSS-001"
+    assert findings[0]["type"] == "xss"
+    assert findings[0]["line"] == 3
+    assert "innerHTML" in findings[0]["evidence"]
+
+
+def test_javascript_xss_safe_array_index_is_ignored():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_index_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
+
+
+def test_javascript_xss_array_index_with_comma_in_string():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_index_comma.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert len(findings) == 1
+    assert findings[0]["rule_id"] == "JS-XSS-001"
+    assert findings[0]["line"] == 3

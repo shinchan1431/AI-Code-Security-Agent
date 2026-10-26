@@ -194,6 +194,38 @@ from backend.scanner.rules import (
 )
 
 
+def _split_array_elements(array_contents: str) -> list[str]:
+    """Split array elements on commas outside strings and nested brackets."""
+    elements = []
+    start = 0
+    quote = None
+    escaped = False
+    nesting = 0
+
+    for index, char in enumerate(array_contents):
+        if quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = None
+            continue
+
+        if char in ("'", '"', "`"):
+            quote = char
+        elif char in "([{":
+            nesting += 1
+        elif char in ")]}":
+            nesting -= 1
+        elif char == "," and nesting == 0:
+            elements.append(array_contents[start:index])
+            start = index + 1
+
+    elements.append(array_contents[start:])
+    return elements
+
+
 def analyze_javascript_file(file_path: str) -> list[dict]:
     """
     Analyze a JavaScript or TypeScript file for dangerous patterns.
@@ -206,6 +238,7 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
     taint_state = TaintState()
 
     user_controlled_variables = taint_state.variables
+    tainted_array_indices = set()
     tainted_object_properties = taint_state.object_properties
 
     tainted_function_parameters = {}
@@ -932,7 +965,22 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
             line,
         )
+        array_source_match = re.search(
+            r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\[(.*)\]",
+            line,
+        )
 
+        if array_source_match:
+            array_name = array_source_match.group(1)
+            array_contents = array_source_match.group(2)
+
+            for index, element in enumerate(_split_array_elements(array_contents)):
+                if re.search(
+                    r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
+                    r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
+                    element,
+                ):
+                    tainted_array_indices.add((array_name, index))
         if user_input_match:
             user_controlled_variables.add(user_input_match.group(1))
 
@@ -976,6 +1024,18 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             assigned_expression = derived_variable_match.group(2)
 
             effective_tainted_variables = set(user_controlled_variables)
+            array_index_match = re.fullmatch(
+                r"\s*([A-Za-z_$][\w$]*)\s*\[\s*(\d+)\s*\]\s*;?",
+                assigned_expression,
+            )
+
+            if array_index_match:
+                array_name = array_index_match.group(1)
+                array_index = int(array_index_match.group(2))
+
+                if (array_name, array_index) in tainted_array_indices:
+                    user_controlled_variables.add(variable_name)
+                    effective_tainted_variables.add(variable_name)
             # Propagate SSRF taint through derived variables.
             if any(
                 re.search(
