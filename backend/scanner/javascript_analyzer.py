@@ -1036,6 +1036,21 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                 if (array_name, array_index) in tainted_array_indices:
                     user_controlled_variables.add(variable_name)
                     effective_tainted_variables.add(variable_name)
+            else:
+                dynamic_array_index_match = re.fullmatch(
+                    r"\s*([A-Za-z_$][\w$]*)\s*\[\s*[A-Za-z_$][\w$]*\s*\]\s*;?",
+                    assigned_expression,
+                )
+
+                if dynamic_array_index_match:
+                    array_name = dynamic_array_index_match.group(1)
+
+                    if any(
+                        tracked_array == array_name
+                        for tracked_array, _ in tainted_array_indices
+                    ):
+                        user_controlled_variables.add(variable_name)
+                        effective_tainted_variables.add(variable_name)
             # Propagate SSRF taint through derived variables.
             if any(
                 re.search(
@@ -1342,6 +1357,34 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                             f"{object_name}.{property_name}"
                         )
                         break
+        # Propagate taint through object destructuring.
+        object_destructuring_match = re.fullmatch(
+            r"\s*(?:const|let|var)\s+"
+            r"\{\s*(.*?)\s*\}\s*=\s*"
+            r"([A-Za-z_$][\w$]*)\s*;?",
+            line,
+        )
+
+        if object_destructuring_match:
+            destructured_properties = object_destructuring_match.group(1)
+            object_name = object_destructuring_match.group(2)
+
+            for property_spec in destructured_properties.split(","):
+                property_match = re.fullmatch(
+                    r"\s*([A-Za-z_$][\w$]*)"
+                    r"(?:\s*:\s*([A-Za-z_$][\w$]*))?\s*",
+                    property_spec,
+                )
+
+                if not property_match:
+                    continue
+
+                property_name = property_match.group(1)
+                variable_name = property_match.group(2) or property_name
+
+                if f"{object_name}.{property_name}" in tainted_object_properties:
+                    user_controlled_variables.add(variable_name)
+
         # Detect dangerous JavaScript HTML/document sinks
         # when their input is user-controlled.
         xss_patterns = [

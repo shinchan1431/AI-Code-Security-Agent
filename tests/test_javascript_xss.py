@@ -881,3 +881,116 @@ def test_javascript_xss_array_index_with_comma_in_string():
     assert len(findings) == 1
     assert findings[0]["rule_id"] == "JS-XSS-001"
     assert findings[0]["line"] == 3
+
+
+def test_javascript_xss_dynamic_array_index_taint_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_dynamic_index.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 4
+    assert "innerHTML" in xss_findings[0]["evidence"]
+
+
+def test_javascript_xss_safe_dynamic_array_index_is_ignored():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_dynamic_index_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
+
+
+def test_javascript_xss_object_destructuring_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_destructuring.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 6
+
+
+def test_javascript_xss_object_destructuring_safe():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "javascript_xss_object_destructuring_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
+
+
+def test_javascript_xss_object_destructuring_renamed_property():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_destructuring_renamed.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 6
+
+
+def test_javascript_xss_object_destructuring_multiple_properties():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_object_destructuring_multiple.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 2
+    assert [finding["line"] for finding in xss_findings] == [8, 9]
+
+
+def test_javascript_xss_object_destructuring_mixed_safe_property():
+    fixture = (
+        Path(__file__).parent
+        / "fixtures"
+        / "javascript_xss_object_destructuring_mixed_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    assert findings == []
