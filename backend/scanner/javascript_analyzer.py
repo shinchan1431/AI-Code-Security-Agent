@@ -239,7 +239,38 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
 
     user_controlled_variables = taint_state.variables
     tainted_array_indices = set()
+    array_alias_groups = {}
+    known_array_names = set()
     tainted_object_properties = taint_state.object_properties
+
+    def get_array_alias_group(array_name):
+        return set(array_alias_groups.get(array_name, {array_name}))
+
+    def detach_array_alias(array_name):
+        previous_group = get_array_alias_group(array_name)
+        remaining_group = previous_group - {array_name}
+
+        for member in remaining_group:
+            array_alias_groups[member] = remaining_group
+
+        array_alias_groups[array_name] = {array_name}
+
+    def link_array_alias(alias_name, original_name):
+        alias_group = get_array_alias_group(alias_name)
+        original_group = get_array_alias_group(original_name)
+        merged_group = alias_group | original_group
+
+        for member in merged_group:
+            array_alias_groups[member] = merged_group
+
+    def update_array_index_taint(array_name, index, is_tainted):
+        for member in get_array_alias_group(array_name):
+            index_reference = (member, index)
+
+            if is_tainted:
+                tainted_array_indices.add(index_reference)
+            else:
+                tainted_array_indices.discard(index_reference)
 
     tainted_function_parameters = {}
     prototype_pollution_keys = set()
@@ -973,14 +1004,58 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
         if array_source_match:
             array_name = array_source_match.group(1)
             array_contents = array_source_match.group(2)
+            known_array_names.add(array_name)
+            array_alias_groups.setdefault(array_name, {array_name})
 
             for index, element in enumerate(_split_array_elements(array_contents)):
-                if re.search(
-                    r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
-                    r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
-                    element,
+                if (
+                    re.search(
+                        r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
+                        r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
+                        element,
+                    )
+                    or any(
+                        re.search(
+                            rf"\b{re.escape(tainted_variable)}\b",
+                            element,
+                        )
+                        for tainted_variable in user_controlled_variables
+                    )
                 ):
-                    tainted_array_indices.add((array_name, index))
+                    update_array_index_taint(array_name, index, True)
+        # Track taint changes to numeric array index assignments.
+        array_index_assignment_match = re.search(
+            r"^\s*([A-Za-z_$][\w$]*)\s*\[\s*(\d+)\s*\]\s*=\s*(.+?)\s*;?\s*$",
+            line,
+        )
+
+        if array_index_assignment_match:
+            array_name = array_index_assignment_match.group(1)
+            array_index = int(array_index_assignment_match.group(2))
+            assigned_expression = array_index_assignment_match.group(3)
+
+            if array_name in known_array_names:
+                is_tainted = bool(
+                    re.search(
+                        r"(?:request\.(?:query|body|params)\.[A-Za-z_$][\w$]*|"
+                        r"window\.location(?:\.[A-Za-z_$][\w$]*)?)",
+                        assigned_expression,
+                    )
+                    or any(
+                        re.search(
+                            rf"\b{re.escape(tainted_variable)}\b",
+                            assigned_expression,
+                        )
+                        for tainted_variable in user_controlled_variables
+                    )
+                )
+
+                update_array_index_taint(
+                    array_name,
+                    array_index,
+                    is_tainted,
+                )
+
         if user_input_match:
             user_controlled_variables.add(user_input_match.group(1))
 
@@ -1013,6 +1088,34 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
             else:
                 user_controlled_variables.discard(variable_name)
 
+        # Propagate taint through array destructuring.
+        array_destructuring_match = re.fullmatch(
+            r"\s*(?:const|let|var)\s+"
+            r"\[\s*(.*?)\s*\]\s*=\s*"
+            r"([A-Za-z_$][\w$]*)\s*;?",
+            line,
+        )
+
+        if array_destructuring_match:
+            destructured_variables = array_destructuring_match.group(1)
+            array_name = array_destructuring_match.group(2)
+
+            for index, variable in enumerate(
+                destructured_variables.split(",")
+            ):
+                variable = variable.strip()
+
+                if not re.fullmatch(
+                    r"[A-Za-z_$][\w$]*",
+                    variable,
+                ):
+                    continue
+
+                if any(
+                    (member, index) in tainted_array_indices
+                    for member in get_array_alias_group(array_name)
+                ):
+                    user_controlled_variables.add(variable)
         # Propagate taint through derived variables.
         derived_variable_match = re.search(
             r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(.+)",
@@ -1195,6 +1298,21 @@ def analyze_javascript_file(file_path: str) -> list[dict]:
                     )
                 }
             )
+        # Track array aliases as shared groups instead of copying tainted indices.
+        array_alias_match = re.search(
+            r"^\s*(?:const|let|var)\s+"
+            r"([A-Za-z_$][\w$]*)\s*=\s*"
+            r"([A-Za-z_$][\w$]*)\s*;?\s*$",
+            line,
+        )
+
+        if array_alias_match:
+            alias_name = array_alias_match.group(1)
+            original_name = array_alias_match.group(2)
+
+            if original_name in known_array_names:
+                known_array_names.add(alias_name)
+                link_array_alias(alias_name, original_name)
         # Track aliases between objects, including aliases created
         # before their properties become tainted.
         object_alias_match = re.search(

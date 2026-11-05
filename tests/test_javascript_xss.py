@@ -994,3 +994,74 @@ def test_javascript_xss_object_destructuring_mixed_safe_property():
     findings = analyze_javascript_file(str(fixture))
 
     assert findings == []
+def test_javascript_xss_array_destructuring_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_destructuring.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 6
+def test_javascript_xss_array_alias_destructuring_detection():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_alias_destructuring.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 7
+
+
+def test_javascript_xss_array_alias_overwrite_safe_is_ignored():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_alias_overwrite_safe.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert xss_findings == []
+
+
+def test_javascript_xss_array_alias_overwrite_tainted_is_detected():
+    fixture = (
+        Path(__file__).parent
+        / "vulnerable"
+        / "javascript_xss_array_alias_overwrite_tainted.js"
+    )
+
+    findings = analyze_javascript_file(str(fixture))
+
+    xss_findings = [
+        finding
+        for finding in findings
+        if finding["rule_id"] == "JS-XSS-001"
+    ]
+
+    assert len(xss_findings) == 1
+    assert xss_findings[0]["line"] == 5
